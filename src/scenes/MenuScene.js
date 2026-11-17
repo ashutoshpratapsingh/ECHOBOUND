@@ -322,41 +322,38 @@ class MenuScene extends Phaser.Scene {
         .setOrigin(0.5);
     }
 
-    const cardElements = [cardBg, titleText, descText, playBadge];
+    
+const onCardClick = () => {
+  if (!isUnlocked) {
+    this.showLockedAlert(lvl);
+  } else {
+    this.startLevel(lvl.num);
+  }
+};
 
-    const onCardClick = () => {
-      if (!isUnlocked) {
-        this.showLockedAlert(lvl);
-      } else {
-        this.startLevel(lvl.num);
-      }
-    };
+// Make the complete card one interactive touch area
+cardBg.setInteractive(
+  new Phaser.Geom.Rectangle(-120, -65, 240, 130),
+  Phaser.Geom.Rectangle.Contains
+);
 
-    cardElements.forEach(elem => {
-      elem.on("pointerdown", onCardClick);
+cardBg.on("pointerdown", onCardClick);
 
-      elem.on("pointerover", () => {
-        if (isUnlocked) {
-          cardBg.setScale(1.03);
-          titleText.setScale(1.03);
-          descText.setScale(1.03);
-          playBadge.setScale(1.03);
-        } else {
-          cardBg.setStrokeStyle(3, 0xff5252);
-        }
-      });
+cardBg.on("pointerover", () => {
+  if (isUnlocked) {
+    cardBg.setScale(1.03);
+  } else {
+    cardBg.setStrokeStyle(3, 0xff5252);
+  }
+});
 
-      elem.on("pointerout", () => {
-        if (isUnlocked) {
-          cardBg.setScale(1);
-          titleText.setScale(1);
-          descText.setScale(1);
-          playBadge.setScale(1);
-        } else {
-          cardBg.setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color);
-        }
-      });
-    });
+cardBg.on("pointerout", () => {
+  cardBg.setScale(1);
+  cardBg.setStrokeStyle(
+    3,
+    Phaser.Display.Color.HexStringToColor(lvl.border).color
+  );
+});
 
     lvl.cardBg = cardBg;
   }

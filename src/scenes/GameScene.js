@@ -1231,9 +1231,17 @@ class GameScene extends Phaser.Scene {
   }
 
   createMobileControls() {
-    this.mobileLeft = false;
-    this.mobileRight = false;
-    this.mobileJump = false;
+  this.input.on("pointerup", () => {
+  this.mobileLeft = false;
+  this.mobileRight = false;
+  this.mobileJump = false;
+});
+
+this.input.on("gameout", () => {
+  this.mobileLeft = false;
+  this.mobileRight = false;
+  this.mobileJump = false;
+});
 
     this.createTouchButton(70, 465, "◀", () => (this.mobileLeft = true), () => (this.mobileLeft = false));
     this.createTouchButton(170, 465, "▶", () => (this.mobileRight = true), () => (this.mobileRight = false));
@@ -1246,40 +1254,61 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  createTouchButton(x, y, label, onDown, onUp = () => {}, bgColor = "#124036", strokeColor = "#3ae7c6") {
-    const btn = this.add
-      .circle(x, y, 38, Phaser.Display.Color.HexStringToColor(bgColor).color, 0.75)
-      .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(strokeColor).color)
-      .setScrollFactor(0)
-      .setDepth(200)
-      .setInteractive();
+createTouchButton(
+  x,
+  y,
+  label,
+  onDown,
+  onUp = () => {},
+  bgColor = "#124036",
+  strokeColor = "#3ae7c6"
+) {
+  const btn = this.add
+    .circle(
+      x,
+      y,
+      38,
+      Phaser.Display.Color.HexStringToColor(bgColor).color,
+      0.85
+    )
+    .setStrokeStyle(
+      3,
+      Phaser.Display.Color.HexStringToColor(strokeColor).color
+    )
+    .setScrollFactor(0)
+    .setDepth(200)
+    .setInteractive(
+      new Phaser.Geom.Circle(0, 0, 48),
+      Phaser.Geom.Circle.Contains
+    );
 
-    const txt = this.add
-      .text(x, y, label, {
-        fontFamily: "Arial, sans-serif",
-        fontSize: label.length > 2 ? "13px" : "24px",
-        fontStyle: "bold",
-        color: "#ffffff"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(201);
+  this.add
+    .text(x, y, label, {
+      fontFamily: "Arial, sans-serif",
+      fontSize: label.length > 2 ? "13px" : "24px",
+      fontStyle: "bold",
+      color: "#ffffff"
+    })
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(201);
 
-    btn.on("pointerdown", () => {
-      btn.setScale(0.92);
-      onDown();
-    });
+  btn.on("pointerdown", (pointer) => {
+    btn.setScale(0.92);
+    onDown();
+  });
 
-    btn.on("pointerup", () => {
-      btn.setScale(1);
-      onUp();
-    });
+  const release = () => {
+    btn.setScale(1);
+    onUp();
+  };
 
-    btn.on("pointerout", () => {
-      btn.setScale(1);
-      onUp();
-    });
-  }
+  btn.on("pointerup", release);
+  btn.on("pointerout", release);
+  btn.on("pointerupoutside", release);
+
+  return btn;
+}
 
   // ==========================================
   // UPDATE LOOP & MECHANICS
