@@ -89,7 +89,7 @@ export class AnacondaGuardian {
 
     this.treeContainer.add(treeGraphics);
 
-    // Branch solid platform so hero can climb if desired
+    // Branch solid platform so hero can jump on it if desired
     this.branchPlatform = this.scene.add.rectangle(
       this.x + 30,
       this.y - 30,
@@ -370,19 +370,8 @@ export class AnacondaGuardian {
 
     const venom = this.scene.add.circle(startX, startY, 9, 0x44ff3b, 0.95);
     venom.setStrokeStyle(2, 0xffffff);
+    venom.setDepth(15);
     this.venomProjectiles.add(venom);
-
-    // Particle trail
-    const venomTrail = this.scene.add.particles(0, 0, null, {
-      x: startX,
-      y: startY,
-      follow: venom,
-      scale: { start: 0.6, end: 0 },
-      alpha: { start: 0.8, end: 0 },
-      tint: 0x63ff54,
-      lifespan: 300,
-      frequency: 45
-    });
 
     const targetX = this.scene.player.x;
     const dx = targetX - startX;
@@ -391,10 +380,18 @@ export class AnacondaGuardian {
     venom.body.setVelocity(vx, -180);
     venom.body.setGravityY(520);
 
+    // Dynamic venom droplet pulse
+    this.scene.tweens.add({
+      targets: venom,
+      scale: 1.25,
+      duration: 180,
+      yoyo: true,
+      repeat: -1
+    });
+
     // Cleanup after 2.5 seconds or on floor hit
     this.scene.time.delayedCall(2500, () => {
       if (venom.active) {
-        venomTrail.destroy();
         venom.destroy();
       }
     });

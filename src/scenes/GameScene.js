@@ -8,6 +8,21 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
+  // SCENE INITIALIZATION & DATA RETRIEVAL
+  // ==========================================
+  init(data) {
+    if (data && data.checkpointX) {
+      this.savedCheckpointX = data.checkpointX;
+      this.savedCheckpointActivated = !!data.checkpointActivated;
+      this.savedCrystals = data.crystalsCollected || 0;
+    } else {
+      this.savedCheckpointX = 100;
+      this.savedCheckpointActivated = false;
+      this.savedCrystals = 0;
+    }
+  }
+
+  // ==========================================
   // PRELOAD ASSETS
   // ==========================================
   preload() {
@@ -33,16 +48,16 @@ export default class GameScene extends Phaser.Scene {
     // Gameplay State
     this.health = 3;
     this.maxHealth = 3;
-    this.crystalsCollected = 0;
+    this.crystalsCollected = this.savedCrystals;
     this.totalCrystals = 3;
-    this.checkpointX = 100;
+    this.checkpointX = this.savedCheckpointX;
+    this.checkpointActivated = this.savedCheckpointActivated;
     this.damageCooldown = false;
     this.levelComplete = false;
-    this.gameStarted = false;
+    this.gameStarted = this.savedCheckpointActivated; // If restarting from checkpoint, skip title screen
     this.echoActive = false;
     this.echoCooldown = false;
     this.echoDuration = 3200; // 3.2s echo duration
-    this.echoTimer = null;
     this.stepTimer = 0;
 
     // Build World Layers
@@ -64,22 +79,26 @@ export default class GameScene extends Phaser.Scene {
     this.createHUD();
     this.setupInput();
     this.createMobileControls();
-    this.createStartScreen();
+
+    if (!this.gameStarted) {
+      this.createStartScreen();
+    }
 
     // Initial hint message
-    this.showMessage("WELCOME TO ECHOBOUND! FIND 3 ENERGY CRYSTALS", 3200);
+    const welcomeMsg = this.checkpointActivated
+      ? "RESPAWNED AT CHECKPOINT! CONTINUE FORWARD"
+      : "WELCOME TO ECHOBOUND! FIND 3 ENERGY CRYSTALS";
+    this.showMessage(welcomeMsg, 3200);
   }
 
   // ==========================================
   // 1. PARALLAX JUNGLE BACKGROUND
   // ==========================================
   createBackground() {
-    // Ambient deep canopy back-fill
     this.add
       .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x091b1a)
       .setDepth(-30);
 
-    // Repeating hand-painted panoramic jungle backdrop
     const panoramaWidth = 1500;
     const panoramaHeight = 845;
     for (let x = 0; x < this.worldWidth + panoramaWidth; x += panoramaWidth - 6) {
@@ -95,7 +114,6 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Midground atmospheric fog & mist
     for (let i = 0; i < 40; i++) {
       const mist = this.add.circle(
         Phaser.Math.Between(0, this.worldWidth),
@@ -116,7 +134,6 @@ export default class GameScene extends Phaser.Scene {
       });
     }
 
-    // Foreground ambient vegetation silhouette
     this.add
       .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, 0x143521, 0.85)
       .setDepth(-2);
@@ -128,7 +145,7 @@ export default class GameScene extends Phaser.Scene {
   createDecorations() {
     const vinePositions = [280, 680, 1150, 1620, 2180, 2700, 3050, 3650, 3950];
 
-    vinePositions.forEach((x, index) => {
+    vinePositions.forEach((x) => {
       const vines = this.add.graphics();
       vines.lineStyle(6, 0x2e4f2b, 0.95);
       vines.beginPath();
@@ -138,7 +155,6 @@ export default class GameScene extends Phaser.Scene {
       vines.strokePath();
       vines.setDepth(-1);
 
-      // Lush hanging tropical leaves
       const leaves = this.add.graphics();
       for (let i = 0; i < 6; i++) {
         leaves.fillStyle(i % 2 === 0 ? 0x185633 : 0x367f44, 0.95);
@@ -147,7 +163,6 @@ export default class GameScene extends Phaser.Scene {
       leaves.setDepth(3);
     });
 
-    // Ambient floating fireflies
     this.fireflies = [];
     for (let i = 0; i < 35; i++) {
       const fly = this.add.circle(
@@ -185,7 +200,6 @@ export default class GameScene extends Phaser.Scene {
     );
     this.physics.add.existing(this.ground, true);
 
-    // Vibrant green grass top layer
     const grass = this.add.rectangle(
       this.worldWidth / 2,
       482,
@@ -195,7 +209,6 @@ export default class GameScene extends Phaser.Scene {
     );
     grass.setDepth(2);
 
-    // Stylized moss tufts along the edge
     const mossEdge = this.add.graphics();
     for (let x = 0; x < this.worldWidth; x += 38) {
       mossEdge.fillStyle(0x9fc84e, 1);
@@ -206,7 +219,6 @@ export default class GameScene extends Phaser.Scene {
     }
     mossEdge.setDepth(3);
 
-    // Ground rock striations
     const groundDetails = this.add.graphics();
     for (let x = 0; x < this.worldWidth; x += 55) {
       groundDetails.lineStyle(2, 0x644630, 0.65);
@@ -220,14 +232,14 @@ export default class GameScene extends Phaser.Scene {
   // 4. HERO CHARACTER & ANIMATIONS
   // ==========================================
   createHero() {
-    this.player = this.physics.add.sprite(100, 470, "jungleBoy");
+    const spawnX = this.checkpointX;
+    this.player = this.physics.add.sprite(spawnX, 470, "jungleBoy");
     this.player.setOrigin(0.5, 1);
     this.player.setCollideWorldBounds(true);
     this.player.setMaxVelocity(280, 850);
     this.player.setDepth(10);
     this.player.setScale(0.22);
 
-    // Accurate foot physics body
     this.player.body.setSize(150, 210);
     this.player.body.setOffset(135, 350);
 
@@ -236,7 +248,6 @@ export default class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.ground);
 
-    // Smooth camera follow
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     this.cameras.main.setDeadzone(200, 90);
   }
@@ -286,7 +297,6 @@ export default class GameScene extends Phaser.Scene {
       const graphics = this.add.graphics();
       graphics.fillStyle(0xd5ddd2, 1);
 
-      // Stylized jungle thorns/spikes
       for (let i = 0; i < 5; i++) {
         graphics.fillTriangle(
           x - 48 + i * 20, 480,
@@ -368,7 +378,6 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.existing(this.movingPlatform, true);
     this.physics.add.collider(this.player, this.movingPlatform);
 
-    // Platform moss overlay
     const platformMoss = this.add.graphics();
     platformMoss.fillStyle(0x7fb33f, 1);
     platformMoss.fillRoundedRect(-67, -11, 134, 7, 3);
@@ -469,7 +478,6 @@ export default class GameScene extends Phaser.Scene {
   createEchoPlatforms() {
     this.echoPlatforms = [];
 
-    // Positions including overhead bypass platforms for the Anaconda encounter!
     const echoPositions = [
       { x: 860, y: 395, width: 120 },
       { x: 980, y: 325, width: 120 },
@@ -482,29 +490,27 @@ export default class GameScene extends Phaser.Scene {
     ];
 
     echoPositions.forEach((p) => {
-      // Platform container
-      const container = this.add.container(p.x, p.y).setDepth(7).setAlpha(0);
-
-      // Core ethereal glowing bar
-      const bar = this.add.rectangle(0, 0, p.width, 18, 0x47e8da);
+      // Solid physics bar at world coordinates
+      const bar = this.add.rectangle(p.x, p.y, p.width, 18, 0x47e8da);
       bar.setStrokeStyle(2, 0xffffff);
+      bar.setDepth(7);
+      bar.setAlpha(0);
 
-      // Glowing rune markings
-      const runeText = this.add.text(0, 0, "◆ ◆ ◆", {
-        fontSize: "12px",
-        color: "#ffffff",
-        fontStyle: "bold"
-      }).setOrigin(0.5);
+      const runeText = this.add
+        .text(p.x, p.y, "◆ ◆ ◆", {
+          fontSize: "12px",
+          color: "#ffffff",
+          fontStyle: "bold"
+        })
+        .setOrigin(0.5)
+        .setDepth(8)
+        .setAlpha(0);
 
-      container.add([bar, runeText]);
-
-      // Physical platform
       this.physics.add.existing(bar, true);
       bar.body.enable = false;
-
       this.physics.add.collider(this.player, bar);
 
-      this.echoPlatforms.push({ container, bar });
+      this.echoPlatforms.push({ bar, runeText });
     });
   }
 
@@ -514,17 +520,18 @@ export default class GameScene extends Phaser.Scene {
   createCrystals() {
     this.crystals = [];
 
-    // 3 Key crystals:
-    // 1: Introduction area atop root
-    // 2: Mid-level temple ruins
-    // 3: High above the Anaconda Guardian tree!
     const crystalPositions = [
-      { x: 550, y: 430 },
-      { x: 2060, y: 430 },
-      { x: 3410, y: 205 }
+      { x: 550, y: 430, id: 0 },
+      { x: 2060, y: 430, id: 1 },
+      { x: 3410, y: 205, id: 2 }
     ];
 
-    crystalPositions.forEach((p, idx) => {
+    crystalPositions.forEach((p) => {
+      // If already collected prior to checkpoint reload, skip
+      if (this.savedCrystals > p.id) {
+        return;
+      }
+
       const container = this.add.container(p.x, p.y).setDepth(8);
 
       const glow = this.add.circle(0, 0, 26, 0x42f5d4, 0.28);
@@ -544,13 +551,14 @@ export default class GameScene extends Phaser.Scene {
 
       container.add([glow, crystal, core]);
 
-      // Physics hitbox
-      this.physics.add.existing(crystal, true);
-      this.physics.add.overlap(this.player, crystal, () => {
-        this.collectCrystal(container, crystal, idx);
+      // Standalone sensor at world coordinates
+      const sensor = this.add.circle(p.x, p.y, 25, 0xffffff, 0);
+      this.physics.add.existing(sensor, true);
+
+      this.physics.add.overlap(this.player, sensor, () => {
+        this.collectCrystal(container, sensor, p.id);
       });
 
-      // Floating & rotating idle animation
       this.tweens.add({
         targets: [crystal, core],
         angle: 360,
@@ -576,7 +584,7 @@ export default class GameScene extends Phaser.Scene {
         repeat: -1
       });
 
-      this.crystals.push(container);
+      this.crystals.push({ container, sensor });
     });
   }
 
@@ -589,18 +597,20 @@ export default class GameScene extends Phaser.Scene {
     const pole = this.add.rectangle(0, 0, 12, 125, 0x8a6e4d);
     pole.setStrokeStyle(2, 0x48351f);
 
+    const flagColor = this.checkpointActivated ? 0xffd54f : 0x5a6369;
     this.checkpointFlag = this.add.triangle(
       26, -42,
       0, 0,
       0, 36,
       48, 18,
-      0x5a6369
+      flagColor
     );
 
-    this.checkpointLight = this.add.circle(0, -62, 14, 0xffffff, 0.2);
+    const lightColor = this.checkpointActivated ? 0xffea00 : 0xffffff;
+    const lightAlpha = this.checkpointActivated ? 0.9 : 0.2;
+    this.checkpointLight = this.add.circle(0, -62, 14, lightColor, lightAlpha);
 
     this.checkpoint.add([pole, this.checkpointFlag, this.checkpointLight]);
-    this.checkpointActivated = false;
   }
 
   // ==========================================
@@ -615,7 +625,6 @@ export default class GameScene extends Phaser.Scene {
     this.portalInner = this.add.ellipse(0, 0, 70, 92, 0x228b78, 0.6);
     this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xaefff3, 0.7);
 
-    // Runes rotating around portal rim
     this.portalRunes = this.add.text(0, 0, "✦   ✧   ✦   ✧", {
       fontSize: "14px",
       color: "#67ffef"
@@ -628,7 +637,6 @@ export default class GameScene extends Phaser.Scene {
       this.portalRunes
     ]);
 
-    // Portal idle breathing
     this.tweens.add({
       targets: this.portal,
       scale: 1.08,
@@ -645,12 +653,13 @@ export default class GameScene extends Phaser.Scene {
       repeat: -1
     });
 
-    this.portalOpen = false;
+    this.portalOpen = this.crystalsCollected >= this.totalCrystals;
 
-    this.physics.add.existing(this.portal, true);
-    this.portal.body.setSize(100, 120);
+    // Standalone world-space portal trigger
+    this.portalTrigger = this.add.rectangle(4050, 420, 110, 130, 0xffffff, 0);
+    this.physics.add.existing(this.portalTrigger, true);
 
-    this.physics.add.overlap(this.player, this.portal, () => {
+    this.physics.add.overlap(this.player, this.portalTrigger, () => {
       this.enterPortal();
     });
   }
@@ -659,13 +668,11 @@ export default class GameScene extends Phaser.Scene {
   // 11. HUD & INTERFACE
   // ==========================================
   createHUD() {
-    // Top banner styling bar
     this.hudBar = this.add
       .rectangle(480, 24, 960, 48, 0x071513, 0.75)
       .setScrollFactor(0)
       .setDepth(100);
 
-    // Health Hearts
     this.healthText = this.add
       .text(25, 24, "HEALTH: ♥ ♥ ♥", {
         fontFamily: "Arial, sans-serif",
@@ -677,9 +684,8 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    // Crystal Counter
     this.crystalText = this.add
-      .text(220, 24, "CRYSTALS: 0 / 3", {
+      .text(220, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
         fontFamily: "Arial, sans-serif",
         fontSize: "17px",
         color: "#5cffe8",
@@ -689,7 +695,6 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    // Mini Level Progress Bar
     this.progressBarBg = this.add
       .rectangle(480, 24, 180, 10, 0x193831)
       .setScrollFactor(0)
@@ -705,7 +710,6 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // Echo Pulse Gauge
     this.echoGaugeBg = this.add
       .rectangle(680, 24, 90, 12, 0x15312b)
       .setScrollFactor(0)
@@ -726,7 +730,6 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // Sound Mute Toggle Button
     this.muteBtn = this.add
       .text(820, 24, "🔊 SFX ON", {
         fontFamily: "Arial, sans-serif",
@@ -747,7 +750,6 @@ export default class GameScene extends Phaser.Scene {
       this.muteBtn.setStyle({ backgroundColor: isMuted ? "#451616" : "#164539" });
     });
 
-    // Control Hints
     this.controlsHint = this.add
       .text(945, 24, "A/D: MOVE  SPACE: JUMP", {
         fontFamily: "Arial, sans-serif",
@@ -758,7 +760,6 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    // Central Toast Message Box
     this.portalMessage = this.add
       .text(480, 95, "", {
         fontFamily: "Arial, sans-serif",
@@ -796,13 +797,9 @@ export default class GameScene extends Phaser.Scene {
     this.mobileRight = false;
     this.mobileJump = false;
 
-    // Left Button
     this.createTouchButton(70, 465, "◀", () => (this.mobileLeft = true), () => (this.mobileLeft = false));
-    // Right Button
     this.createTouchButton(170, 465, "▶", () => (this.mobileRight = true), () => (this.mobileRight = false));
-    // Echo Pulse Button
     this.createTouchButton(720, 465, "ECHO", () => this.activateEcho(), () => {}, "#166154", "#48f0d8");
-    // Jump Button
     this.createTouchButton(835, 465, "JUMP", () => (this.mobileJump = true), () => (this.mobileJump = false), "#1a6e42", "#52f58b");
 
     this.input.on("pointerup", () => {
@@ -1054,11 +1051,13 @@ export default class GameScene extends Phaser.Scene {
     this.echoActive = true;
     audioManager.playEchoPulse();
 
-    // Sonar shockwave animation expanding outward from hero
     this.createEchoWave(this.player.x, this.player.y);
 
-    // Stun Anaconda if within reach
-    if (this.anaconda && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 650) {
+    // Stun Anaconda if within proximity
+    if (
+      this.anaconda &&
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 650
+    ) {
       this.anaconda.stun();
     }
 
@@ -1066,7 +1065,7 @@ export default class GameScene extends Phaser.Scene {
     this.echoPlatforms.forEach((p) => {
       p.bar.body.enable = true;
       this.tweens.add({
-        targets: p.container,
+        targets: [p.bar, p.runeText],
         alpha: 1,
         duration: 250
       });
@@ -1074,7 +1073,6 @@ export default class GameScene extends Phaser.Scene {
 
     this.showMessage("ECHO PULSE RESONATES! PATHWAYS REVEALED", 1600);
 
-    // HUD Gauge drain animation
     this.echoLabel.setText("ECHO ACTIVE");
     this.tweens.add({
       targets: this.echoGaugeFill,
@@ -1083,12 +1081,10 @@ export default class GameScene extends Phaser.Scene {
       ease: "Linear"
     });
 
-    // Reset after echoDuration
     this.time.delayedCall(this.echoDuration, () => {
-      // Fade out platforms
       this.echoPlatforms.forEach((p) => {
         this.tweens.add({
-          targets: p.container,
+          targets: [p.bar, p.runeText],
           alpha: 0,
           duration: 350,
           onComplete: () => {
@@ -1100,7 +1096,6 @@ export default class GameScene extends Phaser.Scene {
       this.echoActive = false;
       this.echoLabel.setText("ECHO RECHARGING");
 
-      // Brief recharge cooldown
       this.tweens.add({
         targets: this.echoGaugeFill,
         width: 90,
@@ -1113,7 +1108,6 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // Visual concentric sonar wave
   createEchoWave(x, y) {
     for (let r = 0; r < 3; r++) {
       this.time.delayedCall(r * 90, () => {
@@ -1135,7 +1129,6 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.flash(140, 50, 230, 210);
   }
 
-  // Dust puff particle effect for jumps/landings
   createDustPuff(x, y) {
     for (let i = 0; i < 6; i++) {
       const dust = this.add.circle(
@@ -1161,13 +1154,12 @@ export default class GameScene extends Phaser.Scene {
   // ==========================================
   // 17. CRYSTAL COLLECTION
   // ==========================================
-  collectCrystal(container, crystal, index) {
-    if (!crystal.active) return;
+  collectCrystal(container, sensor, index) {
+    if (!sensor.active) return;
 
-    crystal.destroy();
+    sensor.destroy();
     audioManager.playCrystal();
 
-    // Sparkling collection burst
     for (let i = 0; i < 16; i++) {
       const spark = this.add.circle(
         container.x,
@@ -1199,8 +1191,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.showMessage(`CRYSTAL ${this.crystalsCollected}/3 RESTORED!`, 1500);
 
-    // Unlocking portal when all 3 found
-    if (this.crystalsCollected === this.totalCrystals) {
+    if (this.crystalsCollected >= this.totalCrystals) {
       this.portalOpen = true;
       this.showMessage("ALL CRYSTALS RESTORED! THE PORTAL IS AWAKENED!", 3000);
 
@@ -1228,7 +1219,6 @@ export default class GameScene extends Phaser.Scene {
     this.checkpointX = 2450;
     audioManager.playCheckpoint();
 
-    // Turn flag golden yellow
     this.checkpointFlag.setFillStyle(0xffd54f);
     this.checkpointLight.setFillStyle(0xffea00, 0.9);
 
@@ -1253,7 +1243,6 @@ export default class GameScene extends Phaser.Scene {
     this.health = Math.max(0, this.health - amount);
     audioManager.playHurt();
 
-    // Update heart display
     this.healthText.setText("HEALTH: " + "♥ ".repeat(this.health));
 
     this.cameras.main.shake(200, 0.012);
@@ -1268,9 +1257,17 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.health <= 0) {
       this.levelComplete = true;
-      this.showMessage("ENERGY DEPLETED! RESPAWNING AT CHECKPOINT...", 1600);
+      const respawnMsg = this.checkpointActivated
+        ? "ENERGY DEPLETED! RESPAWNING AT CHECKPOINT..."
+        : "ENERGY DEPLETED! RESTARTING LEVEL...";
+      this.showMessage(respawnMsg, 1600);
+
       this.time.delayedCall(1600, () => {
-        this.scene.restart();
+        this.scene.restart({
+          checkpointX: this.checkpointX,
+          checkpointActivated: this.checkpointActivated,
+          crystalsCollected: this.checkpointActivated ? Math.max(this.crystalsCollected, 2) : 0
+        });
       });
     }
   }
@@ -1296,7 +1293,6 @@ export default class GameScene extends Phaser.Scene {
     this.physics.pause();
     this.player.setVelocity(0, 0);
 
-    // Dark victory backdrop
     const overlay = this.add
       .rectangle(480, 270, 960, 540, 0x051a14, 0.94)
       .setScrollFactor(0)
