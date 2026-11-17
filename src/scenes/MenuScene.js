@@ -286,7 +286,6 @@ class MenuScene extends Phaser.Scene {
         color: titleColor
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
 
     const descColor = isUnlocked ? "#d4ece5" : "#60727c";
     const descText = this.add
@@ -298,7 +297,6 @@ class MenuScene extends Phaser.Scene {
         wordWrap: { width: 220 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
 
     const badgeColor = isUnlocked ? lvl.border : "#e57373";
     const badgeBg = isUnlocked ? "#061814" : "#241014";
@@ -312,7 +310,6 @@ class MenuScene extends Phaser.Scene {
         padding: { x: 10, y: 5 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
 
     if (!isUnlocked) {
       this.add
@@ -323,6 +320,7 @@ class MenuScene extends Phaser.Scene {
     }
 
     
+
 const onCardClick = () => {
   if (!isUnlocked) {
     this.showLockedAlert(lvl);
@@ -331,11 +329,8 @@ const onCardClick = () => {
   }
 };
 
-// Make the complete card one interactive touch area
-cardBg.setInteractive(
-  new Phaser.Geom.Rectangle(-120, -65, 240, 130),
-  Phaser.Geom.Rectangle.Contains
-);
+// Use the card background as the only interactive object
+cardBg.setInteractive({ useHandCursor: true });
 
 cardBg.on("pointerdown", onCardClick);
 
