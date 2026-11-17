@@ -1254,6 +1254,7 @@ this.input.on("gameout", () => {
     });
   }
 
+
 createTouchButton(
   x,
   y,
@@ -1263,49 +1264,46 @@ createTouchButton(
   bgColor = "#124036",
   strokeColor = "#3ae7c6"
 ) {
-  const btn = this.add
-    .circle(
-      x,
-      y,
-      38,
+  // Visible button
+  const btn = this.add.circle(x, y, 38, 0x124036, 0.9)
+    .setFillStyle(
       Phaser.Display.Color.HexStringToColor(bgColor).color,
-      0.85
+      0.9
     )
     .setStrokeStyle(
       3,
       Phaser.Display.Color.HexStringToColor(strokeColor).color
     )
     .setScrollFactor(0)
-    .setDepth(200)
-    .setInteractive(
-      new Phaser.Geom.Circle(0, 0, 48),
-      Phaser.Geom.Circle.Contains
-    );
+    .setDepth(200);
 
-  this.add
-    .text(x, y, label, {
-      fontFamily: "Arial, sans-serif",
-      fontSize: label.length > 2 ? "13px" : "24px",
-      fontStyle: "bold",
-      color: "#ffffff"
-    })
+  // Larger invisible touch area (radius 58)
+  btn.setInteractive(
+    new Phaser.Geom.Circle(0, 0, 58),
+    Phaser.Geom.Circle.Contains
+  );
+
+  const txt = this.add.text(x, y, label, {
+    fontSize: label.length > 3 ? "11px" : "18px",
+    color: "#ffffff",
+    fontStyle: "bold"
+  })
     .setOrigin(0.5)
     .setScrollFactor(0)
     .setDepth(201);
 
   btn.on("pointerdown", (pointer) => {
-    btn.setScale(0.92);
+    btn.setScale(0.94);
     onDown();
   });
 
-  const release = () => {
+  const releaseButton = () => {
     btn.setScale(1);
     onUp();
   };
 
-  btn.on("pointerup", release);
-  btn.on("pointerout", release);
-  btn.on("pointerupoutside", release);
+  btn.on("pointerup", releaseButton);
+  btn.on("pointerupoutside", releaseButton);
 
   return btn;
 }

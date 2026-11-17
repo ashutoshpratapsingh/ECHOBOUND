@@ -31,4 +31,26 @@ const config = {
   scene: [MenuScene, GameScene, VictoryScene]
 };
 
+// Initialize Phaser
 window.game = new Phaser.Game(config);
+
+// Mobile fullscreen and landscape support
+const enterGameButton = document.getElementById("enter-game");
+
+if (enterGameButton) {
+  enterGameButton.addEventListener("click", async () => {
+    const gameContainer = document.getElementById("game-container");
+
+    try {
+      if (!document.fullscreenElement && gameContainer) {
+        await gameContainer.requestFullscreen();
+      }
+
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock("landscape");
+      }
+    } catch (error) {
+      console.log("Fullscreen/orientation unavailable:", error);
+    }
+  });
+}

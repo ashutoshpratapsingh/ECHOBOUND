@@ -80,3 +80,60 @@ canvas {
     display: none !important;
   }
 }
+
+
+/* Mobile landscape orientation prompt */
+#rotate-screen {
+  display: none;
+}
+
+@media screen and (max-width: 900px) and (orientation: portrait) {
+  #rotate-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 25px;
+    background: radial-gradient(circle, #123c32, #030a09 75%);
+    color: #c7ede4;
+  }
+
+  .rotate-content {
+    max-width: 340px;
+  }
+
+  .rotate-icon {
+    font-size: 55px;
+    margin-bottom: 25px;
+  }
+
+  .rotate-content h1 {
+    color: #48f0d8;
+    letter-spacing: 4px;
+    font-size: 30px;
+  }
+
+  .rotate-content h2 {
+    margin-top: 25px;
+    font-size: 21px;
+  }
+
+  .rotate-content p {
+    margin: 15px 0 25px;
+    color: #a8c9bd;
+    line-height: 1.6;
+  }
+
+  #enter-game {
+    background: #166154;
+    color: white;
+    border: 2px solid #48f0d8;
+    border-radius: 30px;
+    padding: 14px 24px;
+    font-weight: bold;
+    font-size: 14px;
+  }
+}
