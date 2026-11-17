@@ -1,11 +1,4 @@
-/**
- * ECHOBOUND - Title & Level Select Scene
- * Handles progressive level progression:
- * - Level 1: Always unlocked
- * - Level 2: Locked until Level 1 is completed
- * - Level 3: Locked until Level 1 and Level 2 are completed
- * State persisted via localStorage ("echobound_unlocked_level")
- */
+import Phaser from "phaser";
 
 class MenuScene extends Phaser.Scene {
   constructor() {
@@ -26,6 +19,19 @@ class MenuScene extends Phaser.Scene {
     try {
       localStorage.setItem("echobound_unlocked_level", String(level));
     } catch (e) {}
+  }
+
+  preload() {
+    try {
+      this.load.image("jungleBackground", "./assets/backgrounds/jungle-world.png");
+      this.load.image("level2Background", "./assets/backgrounds/level2-chasm.jpg");
+      this.load.spritesheet("jungleBoy", "./assets/characters/jungle-boy.png", {
+        frameWidth: 420,
+        frameHeight: 560
+      });
+    } catch (e) {
+      console.warn("Asset preload in MenuScene handled cleanly", e);
+    }
   }
 
   create() {
@@ -184,6 +190,7 @@ class MenuScene extends Phaser.Scene {
         padding: { x: 22, y: 11 }
       })
       .setOrigin(0.5)
+      .setDepth(10)
       .setInteractive({ useHandCursor: true });
 
     this.tweens.add({
@@ -200,33 +207,26 @@ class MenuScene extends Phaser.Scene {
 
     // "RESET PROGRESS" BUTTON (Allows re-locking levels 2 & 3 anytime for testing!)
     const resetBtn = this.add
-      .text(width / 2 + 130, 428, "🔒 RESET LOCKS (TEST MODE)", {
+      .text(width / 2 + 130, 428, "🔒 RESET PROGRESS (RELOCK)", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         fontStyle: "bold",
-        color: "#d7b4b8",
+        color: "#ffcdd2",
         backgroundColor: "#2c1719",
         padding: { x: 16, y: 11 }
       })
       .setOrigin(0.5)
-      .setStrokeStyle ? null : null; // safety check
-    
-    // Add stroke style to reset button visually
-    const resetRect = this.add
-      .rectangle(width / 2 + 130, 428, 230, 38, 0x2c1719, 0.9)
-      .setStrokeStyle(1.5, 0x884444)
+      .setDepth(10)
       .setInteractive({ useHandCursor: true });
-    
-    // Put text on top of rect
-    resetBtn.setDepth(10);
-    resetRect.setDepth(9);
 
-    resetRect.on("pointerdown", () => {
-      this.resetLocks();
-    });
-    resetBtn.setInteractive({ useHandCursor: true });
     resetBtn.on("pointerdown", () => {
       this.resetLocks();
+    });
+    resetBtn.on("pointerover", () => {
+      resetBtn.setStyle({ backgroundColor: "#4a1c20" });
+    });
+    resetBtn.on("pointerout", () => {
+      resetBtn.setStyle({ backgroundColor: "#2c1719" });
     });
 
     // Footer Control Tips
@@ -275,7 +275,7 @@ class MenuScene extends Phaser.Scene {
         isUnlocked ? 0.95 : 0.65
       )
       .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color)
-      .setInteractive({ useHandCursor: isUnlocked });
+      .setInteractive({ useHandCursor: true });
 
     const titleColor = isUnlocked ? "#ffffff" : "#8a969e";
     const titleText = this.add
@@ -286,7 +286,7 @@ class MenuScene extends Phaser.Scene {
         color: titleColor
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: isUnlocked });
+      .setInteractive({ useHandCursor: true });
 
     const descColor = isUnlocked ? "#d4ece5" : "#60727c";
     const descText = this.add
@@ -298,7 +298,7 @@ class MenuScene extends Phaser.Scene {
         wordWrap: { width: 220 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: isUnlocked });
+      .setInteractive({ useHandCursor: true });
 
     const badgeColor = isUnlocked ? lvl.border : "#e57373";
     const badgeBg = isUnlocked ? "#061814" : "#241014";
@@ -312,12 +312,10 @@ class MenuScene extends Phaser.Scene {
         padding: { x: 10, y: 5 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: isUnlocked });
+      .setInteractive({ useHandCursor: true });
 
-    // Optional lock overlay icon for locked cards
-    let lockIcon = null;
     if (!isUnlocked) {
-      lockIcon = this.add
+      this.add
         .text(lvl.x + 95, lvl.y - 45, "🔒", {
           fontSize: "18px"
         })
@@ -325,7 +323,6 @@ class MenuScene extends Phaser.Scene {
     }
 
     const cardElements = [cardBg, titleText, descText, playBadge];
-    if (lockIcon) cardElements.push(lockIcon);
 
     const onCardClick = () => {
       if (!isUnlocked) {
@@ -338,30 +335,29 @@ class MenuScene extends Phaser.Scene {
     cardElements.forEach(elem => {
       elem.on("pointerdown", onCardClick);
 
-      if (isUnlocked) {
-        elem.on("pointerover", () => {
-          cardBg.setScale(1.04);
-          titleText.setScale(1.04);
-          descText.setScale(1.04);
-          playBadge.setScale(1.04);
-        });
-        elem.on("pointerout", () => {
+      elem.on("pointerover", () => {
+        if (isUnlocked) {
+          cardBg.setScale(1.03);
+          titleText.setScale(1.03);
+          descText.setScale(1.03);
+          playBadge.setScale(1.03);
+        } else {
+          cardBg.setStrokeStyle(3, 0xff5252);
+        }
+      });
+
+      elem.on("pointerout", () => {
+        if (isUnlocked) {
           cardBg.setScale(1);
           titleText.setScale(1);
           descText.setScale(1);
           playBadge.setScale(1);
-        });
-      } else {
-        elem.on("pointerover", () => {
-          cardBg.setStrokeStyle(3, 0xff5252);
-        });
-        elem.on("pointerout", () => {
+        } else {
           cardBg.setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color);
-        });
-      }
+        }
+      });
     });
 
-    lvl.elements = cardElements;
     lvl.cardBg = cardBg;
   }
 
@@ -376,6 +372,8 @@ class MenuScene extends Phaser.Scene {
         : "🔒 LEVEL 3 IS LOCKED! Complete Level 1 & Level 2 to enter Guardian's Lair.";
 
     this.toastText.setText(reqMsg);
+    this.toastBg.setFillStyle(0x1f0b0c, 0.95).setStrokeStyle(2, 0xff5252);
+    this.toastText.setColor("#ffcdd2");
     this.toastContainer.setAlpha(1);
 
     // Shake the clicked card
@@ -432,4 +430,4 @@ class MenuScene extends Phaser.Scene {
   }
 }
 
-window.MenuScene = MenuScene;
+export default MenuScene;

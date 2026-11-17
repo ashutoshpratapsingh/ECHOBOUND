@@ -1,1 +1,0 @@
-ECHOBOUND visual assets: illustrated jungle panorama, integrated anaconda-tree background prop, and four-pose jungle hero spritesheet. The anaconda is scenery only and no longer attacks or floats as a separate enemy sprite.

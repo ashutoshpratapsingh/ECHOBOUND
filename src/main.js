@@ -1,13 +1,19 @@
 import Phaser from "phaser";
-import GameScene from "./scenes/GameScene";
-import "./style.css";
+
+import "./audio/SoundManager.js";
+import "./entities/PathSnake.js";
+import "./entities/AnacondaBoss.js";
+
+import MenuScene from "./scenes/MenuScene.js";
+import GameScene from "./scenes/GameScene.js";
+import VictoryScene from "./scenes/VictoryScene.js";
 
 const config = {
   type: Phaser.AUTO,
   width: 960,
   height: 540,
   parent: "game-container",
-  backgroundColor: "#080f25",
+  backgroundColor: "#050f0e",
 
   scale: {
     mode: Phaser.Scale.FIT,
@@ -22,7 +28,7 @@ const config = {
     }
   },
 
-  scene: [GameScene]
+  scene: [MenuScene, GameScene, VictoryScene]
 };
 
-new Phaser.Game(config);
+window.game = new Phaser.Game(config);

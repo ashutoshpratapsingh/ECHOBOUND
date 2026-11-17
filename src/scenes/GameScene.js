@@ -1,8 +1,9 @@
 import Phaser from "phaser";
-import { audioManager } from "../audio/SoundEffects";
-import { AnacondaGuardian } from "../entities/AnacondaGuardian";
+import "../audio/SoundManager.js";
+import "../entities/PathSnake.js";
+import "../entities/AnacondaBoss.js";
 
-export default class GameScene extends Phaser.Scene {
+class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
   }
@@ -18,87 +19,55 @@ export default class GameScene extends Phaser.Scene {
   }
 
   init(data) {
-    const requested = (data && data.level) || 1;
-    const unlocked = this.getUnlockedLevel();
-    this.currentLevel = requested > unlocked ? unlocked : requested;
+    const requestedLevel = (data && data.level) || 1;
+    const unlockedLevel = this.getUnlockedLevel();
+
+    // Enforce sequential level locking: cannot jump past locked levels
+    if (requestedLevel > unlockedLevel) {
+      this.currentLevel = unlockedLevel;
+    } else {
+      this.currentLevel = requestedLevel;
+    }
     this.checkpointX = (data && data.checkpointX) || 100;
     this.checkpointActivated = !!(data && data.checkpointActivated);
     this.savedCrystals = (data && data.crystalsCollected) || 0;
   }
 
   preload() {
-    this.load.image("jungleBackground", "/assets/backgrounds/jungle-world.png");
-    this.load.image("jungleTile", "/assets/backgrounds/jungle-tile.png");
-
-    this.load.spritesheet("jungleBoy", "/assets/characters/jungle-boy.png", {
-      frameWidth: 420,
-      frameHeight: 560
-    });
+    try {
+      this.load.image("jungleBackground", "./assets/backgrounds/jungle-world.png");
+      this.load.image("level2Background", "./assets/backgrounds/level2-chasm.jpg");
+      this.load.spritesheet("jungleBoy", "./assets/characters/jungle-boy.png", {
+        frameWidth: 420,
+        frameHeight: 560
+      });
+    } catch (e) {
+      console.warn("Asset preload handled by fallback generator", e);
+    }
   }
 
   create() {
-    // Distinct Level Visual Themes & Palettes
+    this.ensureFallbackTextures();
+
+    // Level-specific world configurations
     const levelConfigs = {
-      1: {
-        name: "THE WHISPERING CANOPY",
-        width: 2800,
-        portalX: 2650,
-        hasBoss: false,
-        skyColor: 0x0a2b22,
-        bgTint: 0x98ffcd,
-        groundSoil: 0x3e2c22,
-        groundGrass: 0x6da438,
-        groundMoss: 0x9ecf4a,
-        sporeColor: 0xfff3a8,
-        ambientFog: 0xd4f5e8,
-        vineColor: 0x2e4f2b,
-        leafLight: 0x367f44,
-        leafDark: 0x185633
-      },
-      2: {
-        name: "THE ANCIENT CHASM",
-        width: 3600,
-        portalX: 3450,
-        hasBoss: false,
-        skyColor: 0x100d29,
-        bgTint: 0x7b6be8,
-        groundSoil: 0x201c33,
-        groundGrass: 0x4d5b85,
-        groundMoss: 0x7688c2,
-        sporeColor: 0xb388ff,
-        ambientFog: 0xc8b8ff,
-        vineColor: 0x28234a,
-        leafLight: 0x463f73,
-        leafDark: 0x211c40
-      },
-      3: {
-        name: "THE GUARDIAN'S SANCTUM",
-        width: 4000,
-        portalX: 3850,
-        hasBoss: true,
-        skyColor: 0x2b080a,
-        bgTint: 0xff5555,
-        groundSoil: 0x240e0c,
-        groundGrass: 0x872618,
-        groundMoss: 0xc9492e,
-        sporeColor: 0xff7043,
-        ambientFog: 0xffb4a2,
-        vineColor: 0x4a1815,
-        leafLight: 0x78281f,
-        leafDark: 0x3d120d
-      }
+      1: { name: "THE WHISPERING CANOPY", width: 2800, portalX: 2650, portalY: 420, hasBoss: false },
+      2: { name: "THE ANCIENT CHASM", width: 3400, portalX: 3250, portalY: 420, hasBoss: false },
+      3: { name: "THE GUARDIAN'S SANCTUM", width: 3800, portalX: 3580, portalY: 250, hasBoss: true }
     };
 
-    this.cfg = levelConfigs[this.currentLevel] || levelConfigs[1];
-    this.levelName = this.cfg.name;
-    this.worldWidth = this.cfg.width;
+    const cfg = levelConfigs[this.currentLevel] || levelConfigs[1];
+    this.levelName = cfg.name;
+    this.worldWidth = cfg.width;
     this.worldHeight = 540;
-    this.portalX = this.cfg.portalX;
-    this.hasBoss = this.cfg.hasBoss;
+    this.portalX = cfg.portalX;
+    this.portalY = cfg.portalY || 420;
+    this.hasBoss = cfg.hasBoss;
 
     this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
 
+    // State Variables
     this.health = 3;
     this.maxHealth = 3;
     this.crystalsCollected = this.savedCrystals;
@@ -111,6 +80,7 @@ export default class GameScene extends Phaser.Scene {
     this.swingingHazards = [];
     this.anaconda = null;
 
+    // Build Lush Jungle World Elements
     this.createBackground();
     this.createDecorations();
     this.createGround();
@@ -118,98 +88,234 @@ export default class GameScene extends Phaser.Scene {
     this.buildLevelContent();
     this.createExitPortal();
 
+    // Setup HUD and Controls
     this.createHUD();
+    this.createReflectionBanner();
     this.setupInput();
     this.createMobileControls();
 
+    // Level start announcement toast
     this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 2800);
   }
 
+  ensureFallbackTextures() {
+    if (!this.textures.exists("jungleBoy")) {
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      const frameW = 420;
+      const frameH = 560;
+
+      for (let i = 0; i < 4; i++) {
+        const ox = i * frameW;
+        const legOffset = i === 1 ? 25 : (i === 2 ? -20 : (i === 3 ? 10 : 0));
+
+        // Tanned Athletic Torso (Tarzan)
+        g.fillStyle(0xd69b6a, 1);
+        g.fillRoundedRect(ox + 165, 210, 90, 140, 20);
+
+        // Chest & abs definition
+        g.fillStyle(0xb87d4e, 0.7);
+        g.fillRect(ox + 175, 235, 30, 22);
+        g.fillRect(ox + 215, 235, 30, 22);
+        g.fillRect(ox + 190, 270, 40, 16);
+
+        // Tarzan Head
+        g.fillStyle(0xd69b6a, 1);
+        g.fillCircle(ox + 210, 150, 44);
+
+        // Wild Tarzan Brown Hair (spiky jungle mane)
+        g.fillStyle(0x382010, 1);
+        g.fillCircle(ox + 210, 125, 48);
+        g.fillTriangle(ox + 160, 130, ox + 185, 95, ox + 195, 140);
+        g.fillTriangle(ox + 190, 110, ox + 210, 85, ox + 225, 125);
+        g.fillTriangle(ox + 220, 120, ox + 245, 95, ox + 260, 145);
+        g.fillTriangle(ox + 155, 160, ox + 170, 135, ox + 175, 180);
+
+        // Vine Headband
+        g.fillStyle(0x2d6832, 1);
+        g.fillRect(ox + 172, 135, 76, 10);
+        g.fillStyle(0x56b05e, 1);
+        g.fillCircle(ox + 210, 140, 6);
+
+        // Face: Eyes & Smile
+        g.fillStyle(0xffffff, 1);
+        g.fillCircle(ox + 198, 155, 6);
+        g.fillCircle(ox + 222, 155, 6);
+        g.fillStyle(0x1a120c, 1);
+        g.fillCircle(ox + 199, 155, 3);
+        g.fillCircle(ox + 223, 155, 3);
+        g.lineStyle(3, 0x8a4a2a, 1);
+        g.beginPath();
+        g.moveTo(ox + 200, 172);
+        g.lineTo(ox + 220, 172);
+        g.strokePath();
+
+        // Athletic Arms
+        g.fillStyle(0xd69b6a, 1);
+        g.fillRoundedRect(ox + 140, 215, 25, 110, 12);
+        g.fillRoundedRect(ox + 255, 215, 25, 110, 12);
+        // Armband
+        g.fillStyle(0x2d6832, 1);
+        g.fillRect(ox + 255, 240, 25, 8);
+
+        // Jungle Leaf Loincloth (Tarzan wrap)
+        g.fillStyle(0x327536, 1);
+        g.fillRoundedRect(ox + 160, 335, 100, 48, 12);
+        g.fillStyle(0xc98f28, 1);
+        g.fillTriangle(ox + 170, 375, ox + 210, 410, ox + 250, 375);
+
+        // Running Legs
+        g.fillStyle(0xd69b6a, 1);
+        g.fillRoundedRect(ox + 175, 375, 28, 95 + legOffset, 12);
+        g.fillRoundedRect(ox + 217, 375, 28, 95 - legOffset, 12);
+
+        // Bare Feet
+        g.fillStyle(0xb87d4e, 1);
+        g.fillRoundedRect(ox + 170, 465 + legOffset, 34, 16, 6);
+        g.fillRoundedRect(ox + 217, 465 - legOffset, 34, 16, 6);
+      }
+      g.generateTexture("jungleBoy", frameW * 4, frameH);
+    }
+  }
+
   createBackground() {
+    // LEVEL 2: Custom night waterfall jungle background (Anaconda removed!)
+    if (this.currentLevel === 2 && this.textures.exists("level2Background")) {
+      this.add
+        .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x051326)
+        .setDepth(-30);
+
+      const panoramaWidth = 1500;
+      const panoramaHeight = 845;
+
+      for (let x = 0; x < this.worldWidth + panoramaWidth; x += panoramaWidth - 6) {
+        const panorama = this.add
+          .image(x, -145, "level2Background")
+          .setOrigin(0, 0)
+          .setDisplaySize(panoramaWidth, panoramaHeight)
+          .setScrollFactor(0.22)
+          .setDepth(-20);
+
+        if (Math.floor(x / (panoramaWidth - 6)) % 2 === 1) {
+          panorama.setFlipX(true);
+        }
+      }
+
+      // Floating night waterfall mist particles
+      for (let i = 0; i < 40; i++) {
+        const mist = this.add.circle(
+          Phaser.Math.Between(0, this.worldWidth),
+          Phaser.Math.Between(80, 460),
+          Phaser.Math.Between(3, 10),
+          0x9be8ff,
+          0.16
+        );
+        mist.setDepth(-4);
+
+        this.tweens.add({
+          targets: mist,
+          x: mist.x + Phaser.Math.Between(30, 80),
+          alpha: 0.03,
+          duration: Phaser.Math.Between(2500, 5000),
+          yoyo: true,
+          repeat: -1
+        });
+      }
+
+      this.add
+        .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, 0x0d2838, 0.85)
+        .setDepth(-2);
+      return;
+    }
+
+    // LEVEL 1 & LEVEL 3: Pure, clean lush emerald rainforest
     this.add
-      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, this.cfg.skyColor)
+      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x071b19)
       .setDepth(-30);
 
     const panoramaWidth = 1500;
     const panoramaHeight = 845;
+
+    // Pure, clean, untinted lush jungle panorama
     for (let x = 0; x < this.worldWidth + panoramaWidth; x += panoramaWidth - 6) {
-      const panorama = this.add
-        .image(x, -145, "jungleBackground")
-        .setOrigin(0, 0)
-        .setDisplaySize(panoramaWidth, panoramaHeight)
-        .setScrollFactor(0.2)
-        .setDepth(-20)
-        .setTint(this.cfg.bgTint);
+      if (this.textures.exists("jungleBackground")) {
+        const panorama = this.add
+          .image(x, -145, "jungleBackground")
+          .setOrigin(0, 0)
+          .setDisplaySize(panoramaWidth, panoramaHeight)
+          .setScrollFactor(0.2)
+          .setDepth(-20);
 
-      if (Math.floor(x / (panoramaWidth - 6)) % 2 === 1) {
-        panorama.setFlipX(true);
+        if (Math.floor(x / (panoramaWidth - 6)) % 2 === 1) {
+          panorama.setFlipX(true);
+        }
       }
     }
 
-    if (this.currentLevel === 1) {
-      const sunbeams = this.add.graphics().setDepth(-10).setScrollFactor(0.1);
-      sunbeams.fillStyle(0xfff7c2, 0.05);
-      sunbeams.fillTriangle(200, -50, 450, 540, 60, 540);
-      sunbeams.fillTriangle(800, -50, 1100, 540, 650, 540);
-      sunbeams.fillTriangle(1500, -50, 1850, 540, 1350, 540);
-    } else if (this.currentLevel === 2) {
-      const ruins = this.add.graphics().setDepth(-12).setScrollFactor(0.3);
-      ruins.fillStyle(0x191638, 0.85);
-      for (let rx = 150; rx < this.worldWidth; rx += 480) {
-        ruins.fillRect(rx, 80, 70, 420);
-        ruins.fillRect(rx - 15, 70, 100, 20);
-      }
-    } else if (this.currentLevel === 3) {
-      const moon = this.add.circle(800, 140, 95, 0xff3b30, 0.45).setScrollFactor(0.05).setDepth(-25);
-      const moonCore = this.add.circle(800, 140, 70, 0xff7b68, 0.75).setScrollFactor(0.05).setDepth(-24);
-      this.tweens.add({ targets: [moon, moonCore], alpha: 0.3, duration: 2500, yoyo: true, repeat: -1 });
-    }
-
-    for (let i = 0; i < 40; i++) {
-      const spore = this.add.circle(
+    // Floating atmospheric mist particles
+    for (let i = 0; i < 35; i++) {
+      const mist = this.add.circle(
         Phaser.Math.Between(0, this.worldWidth),
-        Phaser.Math.Between(60, 450),
-        Phaser.Math.Between(2, 5),
-        this.cfg.sporeColor,
-        0.8
+        Phaser.Math.Between(90, 440),
+        Phaser.Math.Between(4, 12),
+        0xd4f5e8,
+        0.12
       );
-      spore.setDepth(6);
-      const floatY = this.currentLevel === 3 ? -Phaser.Math.Between(30, 80) : Phaser.Math.Between(-25, 25);
+      mist.setDepth(-4);
+
       this.tweens.add({
-        targets: spore,
-        y: spore.y + floatY,
-        x: spore.x + Phaser.Math.Between(-40, 40),
-        alpha: 0.15,
-        scale: 1.5,
-        duration: Phaser.Math.Between(1800, 3500),
+        targets: mist,
+        x: mist.x + Phaser.Math.Between(40, 100),
+        alpha: 0.02,
+        duration: Phaser.Math.Between(3000, 6500),
         yoyo: true,
         repeat: -1
       });
     }
 
     this.add
-      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, this.cfg.vineColor, 0.85)
+      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, 0x143521, 0.85)
       .setDepth(-2);
   }
 
   createDecorations() {
-    const spacing = 420;
-    for (let x = 180; x < this.worldWidth; x += spacing) {
+    const spacing = 450;
+    for (let x = 200; x < this.worldWidth; x += spacing) {
       const vines = this.add.graphics();
-      vines.lineStyle(6, this.cfg.vineColor, 0.95);
+      vines.lineStyle(6, 0x2e4f2b, 0.95);
       vines.beginPath();
       vines.moveTo(x, 0);
-      vines.lineTo(x + 28, 80);
-      vines.lineTo(x + 12, 165);
+      vines.lineTo(x + 28, 75);
+      vines.lineTo(x + 12, 160);
       vines.strokePath();
       vines.setDepth(-1);
 
       const leaves = this.add.graphics();
       for (let i = 0; i < 5; i++) {
-        leaves.fillStyle(i % 2 === 0 ? this.cfg.leafDark : this.cfg.leafLight, 0.95);
+        leaves.fillStyle(i % 2 === 0 ? 0x185633 : 0x367f44, 0.95);
         leaves.fillEllipse(x + i * 14 - 24, 385 + (i % 2) * 16, 75, 24);
       }
       leaves.setDepth(3);
+    }
+
+    // Glowing jungle fireflies
+    for (let i = 0; i < 30; i++) {
+      const fly = this.add.circle(
+        Phaser.Math.Between(80, this.worldWidth - 80),
+        Phaser.Math.Between(90, 440),
+        Phaser.Math.Between(2, 4),
+        0xebff82,
+        0.85
+      );
+      fly.setDepth(6);
+      this.tweens.add({
+        targets: fly,
+        y: fly.y - Phaser.Math.Between(15, 30),
+        alpha: 0.2,
+        scale: 1.6,
+        duration: Phaser.Math.Between(1200, 2600),
+        yoyo: true,
+        repeat: -1
+      });
     }
   }
 
@@ -219,7 +325,7 @@ export default class GameScene extends Phaser.Scene {
       512,
       this.worldWidth,
       56,
-      this.cfg.groundSoil
+      0x3e2c22
     );
     this.physics.add.existing(this.ground, true);
 
@@ -228,15 +334,15 @@ export default class GameScene extends Phaser.Scene {
       482,
       this.worldWidth,
       14,
-      this.cfg.groundGrass
+      0x6b9338
     );
     grass.setDepth(2);
 
     const mossEdge = this.add.graphics();
     for (let x = 0; x < this.worldWidth; x += 38) {
-      mossEdge.fillStyle(this.cfg.groundMoss, 1);
+      mossEdge.fillStyle(0x9fc84e, 1);
       mossEdge.fillRoundedRect(x, 474 + (x % 3) * 2, 28, 8, 3);
-      mossEdge.fillStyle(this.cfg.groundSoil, 1);
+      mossEdge.fillStyle(0x4d752c, 1);
       mossEdge.fillCircle(x + 7, 487, 3);
     }
     mossEdge.setDepth(3);
@@ -297,168 +403,243 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  // ==========================================
+  // LEVEL CONTENT BUILDER (PROGRESSIVE CHALLENGES)
+  // ==========================================
   buildLevelContent() {
     this.echoPlatforms = [];
     this.crystals = [];
     this.swingingHazards = [];
+    this.pathSnakes = [];
 
     if (this.currentLevel === 1) {
+      // LEVEL 1: THE CANOPY (Echo Platforms, Spikes, 3 Crystals)
       this.createSpikes([700, 1600]);
-      this.createEchoPlatformGroup([
-        { x: 950, y: 395, width: 120 },
-        { x: 1100, y: 330, width: 120 },
-        { x: 2050, y: 395, width: 120 },
-        { x: 2200, y: 330, width: 120 }
-      ]);
-      this.createCrystalsGroup([
-        { x: 520, y: 430, id: 0 },
-        { x: 1450, y: 430, id: 1 },
-        { x: 2250, y: 280, id: 2 }
-      ]);
-      this.createCheckpointTotem(1750);
+
+      this.createEchoPlatform(950, 370, 150, 22);
+      this.createEchoPlatform(1250, 310, 160, 22);
+      this.createEchoPlatform(1950, 360, 160, 22);
+      this.createEchoPlatform(2250, 300, 160, 22);
+
+      const crystalCoords = [
+        { x: 950, y: 310, id: 0 },
+        { x: 1750, y: 430, id: 1 },
+        { x: 2250, y: 240, id: 2 }
+      ];
+      crystalCoords.forEach((c) => this.createSunCrystal(c.x, c.y, c.id));
+
+      this.createCheckpointTotem(1450);
     } else if (this.currentLevel === 2) {
-      this.createSpikes([550, 1150, 1750, 2450]);
-      this.createMovingPlatform(700, 395, 1000);
-      this.createSwingingPendulum(1300, 75, 240, -36, 36, 1700);
-      this.createSwingingPendulum(1550, 75, 240, 36, -36, 1700);
-      this.createRollingLog(1850, 450, 1750, 2050, 2200);
-      this.createRollingLog(2200, 450, 2100, 2400, 1900);
-      this.createCheckpointTotem(2400);
-      this.createFallingBoulder(2650, 190, 700);
-      this.createFallingBoulder(2900, 190, 1300);
-      this.createEchoPlatformGroup([
-        { x: 2980, y: 395, width: 110 },
-        { x: 3120, y: 330, width: 110 },
-        { x: 3260, y: 265, width: 110 }
-      ]);
-      this.createCrystalsGroup([
-        { x: 850, y: 340, id: 0 },
-        { x: 2000, y: 430, id: 1 },
-        { x: 3260, y: 215, id: 2 }
-      ]);
-    } else if (this.currentLevel === 3) {
-      this.createSpikes([450, 1100, 1600, 2200]);
-      this.createMovingPlatform(650, 395, 950);
-      this.createSwingingPendulum(1250, 75, 245, -40, 40, 1600);
-      this.createRollingLog(1450, 450, 1350, 1600, 1800);
-      this.createFallingBoulder(1850, 190, 800);
-      this.createFallingBoulder(2100, 190, 1400);
-      this.createCheckpointTotem(2300);
-      this.createSpikes([2950, 3100, 3250]);
-      this.createEchoPlatformGroup([
-        { x: 2880, y: 390, width: 105 },
-        { x: 3040, y: 320, width: 110 },
-        { x: 3200, y: 250, width: 115 },
-        { x: 3360, y: 190, width: 110 }
-      ]);
-      this.createCrystalsGroup([
-        { x: 800, y: 340, id: 0 },
+      // LEVEL 2: THE ANCIENT CHASM (Moving Platforms, Dual Pendulums, Rolling Logs, Falling Boulders)
+      this.createMovingPlatform(620, 370, 880);
+      this.createMovingPlatform(2150, 330, 2400);
+
+      this.createSwingingHazard(1250, 70, 170, -45, 45, 2000);
+      this.createSwingingHazard(2050, 60, 180, 50, -50, 1800);
+
+      this.createRollingLog(1600, 462, 1600, 1850);
+      this.createRollingLog(2550, 462, 2550, 2800);
+
+      this.createFallingBoulder(1850, 40);
+      this.createFallingBoulder(2650, 40);
+
+      this.createSpikes([1100, 1750, 2350]);
+
+      this.createEchoPlatform(1050, 340, 150, 22);
+      this.createEchoPlatform(1400, 280, 160, 22);
+      this.createEchoPlatform(2700, 320, 160, 22);
+
+      const crystalCoords = [
+        { x: 800, y: 310, id: 0 },
         { x: 1950, y: 430, id: 1 },
-        { x: 3200, y: 190, id: 2 }
-      ]);
-      this.anaconda = new AnacondaGuardian(this, 3100, 310);
+        { x: 2700, y: 260, id: 2 }
+      ];
+      crystalCoords.forEach((c) => this.createSunCrystal(c.x, c.y, c.id));
+
+      this.createCheckpointTotem(1750);
+    } else if (this.currentLevel === 3) {
+      // LEVEL 3: THE GUARDIAN'S SANCTUM (HARD CLIMAX - INTENSE HAZARDS + GIANT ANACONDA BOSS)
+      this.createMovingPlatform(550, 370, 820);
+      this.createMovingPlatform(1750, 340, 2050);
+
+      // Dual Swinging Hazards with tight timing
+      this.createSwingingHazard(1100, 60, 180, -50, 50, 1700);
+      this.createSwingingHazard(1550, 65, 175, 45, -45, 1600);
+
+      // Rolling Spiked Logs
+      this.createRollingLog(1300, 462, 1300, 1550);
+      this.createRollingLog(2250, 462, 2250, 2550);
+
+      // Falling Boulders
+      this.createFallingBoulder(1200, 30);
+      this.createFallingBoulder(2400, 30);
+
+      // Multiple Spike Pits guarding the path + impassable floor under tree
+      this.createSpikes([850, 1400, 1950, 2750, 2960, 3100, 3240, 3380, 3500]);
+
+      // Strategic Echo Platforms required to bridge the chasms & arena
+      this.createEchoPlatform(850, 340, 140, 22);
+      this.createEchoPlatform(1400, 290, 150, 22);
+      this.createEchoPlatform(1950, 320, 150, 22);
+      this.createEchoPlatform(2500, 280, 150, 22);
+
+      // Impassable Briar Root Barricade completely sealing off the ground under the tree
+      this.createRootBarricade(3460, 425, 45, 120);
+
+      // === ARENA PLATFORMS & CANOPY PATH TO 3RD CRYSTAL & EXIT ===
+      // Ascent on the left to the Anaconda Banyan branch
+      this.createSolidPlatform(2880, 395, 130, 22);       // Lower solid mossy rock shelf
+      this.createEchoPlatform(2980, 335, 130, 22);        // Echo platform ascending to branch
+      this.createBouncyMushroom(3010, 482);               // Spring mushroom assisting jump up to branch
+      this.branchPlatform = this.createSolidPlatform(3100, 275, 260, 24); // Banyan branch solid platform beneath Crystal 3 & Anaconda
+
+      // Impassable Ancient Guardian Barrier across branch (cannot cross without defeating Anaconda)
+      this.createGuardianBarrier(3230, 240);
+
+      // Elevated canopy bridge to the Ancient Temple Dais & Lumina Portal
+      this.createEchoPlatform(3380, 275, 140, 22);        // Canopy Echo bridge to the Dais
+      this.createSolidPlatform(3580, 295, 200, 26);       // Elevated stone dais holding the Lumina Portal at (3580, 250)
+
+      // 3 High-Skill Sun Crystals
+      const crystalCoords = [
+        { x: 850, y: 280, id: 0 },
+        { x: 1950, y: 260, id: 1 },
+        { x: 3100, y: 220, id: 2 } // High on the banyan branch above the Giant Anaconda!
+      ];
+      crystalCoords.forEach((c) => this.createSunCrystal(c.x, c.y, c.id));
+
+      this.createCheckpointTotem(1950);
+
+      // 3 Dangerous Patrol Snakes on the path leading to the Sanctum
+      this.createPathSnakes();
+
+      // Spawn the Giant Anaconda Boss (50% larger, multi-phase attacks, 3 HP)
+      this.anaconda = new AnacondaBoss(this, 3100, 310);
     }
   }
 
-  createSpikes(positions) {
-    positions.forEach((x) => {
-      const g = this.add.graphics();
-      g.fillStyle(this.currentLevel === 3 ? 0xe64a19 : 0xd5ddd2, 1);
-      for (let i = 0; i < 5; i++) {
-        g.fillTriangle(
-          x - 48 + i * 20, 480,
-          x - 38 + i * 20, 444,
-          x - 28 + i * 20, 480
-        );
+  createPathSnakes() {
+    this.pathSnakes = [];
+    const SnakeClass = typeof PathSnake !== "undefined" ? PathSnake : (window.PathSnake || null);
+    if (!SnakeClass) return;
+
+    // Snake 1: Emerald Tree Viper (Ground patrol between Spikes & Boulder)
+    const viper1 = new SnakeClass(this, 1040, 470, {
+      minX: 960,
+      maxX: 1120,
+      speed: 48,
+      variant: "emerald",
+      name: "Emerald Tree Viper"
+    });
+    this.pathSnakes.push(viper1);
+
+    // Snake 2: Golden Bushmaster (Midway platforming patrol between Pendulum & Moving Platform)
+    const viper2 = new SnakeClass(this, 1670, 470, {
+      minX: 1610,
+      maxX: 1730,
+      speed: 52,
+      variant: "golden",
+      name: "Golden Bushmaster"
+    });
+    this.pathSnakes.push(viper2);
+
+    // Snake 3: Crimson-Fanged Shadow Viper (Guarding the final approach before the Giant Anaconda Arena)
+    const viper3 = new SnakeClass(this, 2660, 470, {
+      minX: 2590,
+      maxX: 2730,
+      speed: 58,
+      variant: "crimson",
+      name: "Crimson Shadow Viper"
+    });
+    this.pathSnakes.push(viper3);
+  }
+
+  createEchoPlatform(x, y, width, height) {
+    const plat = this.add.rectangle(x, y, width, height, 0x1f5c49, 0.18);
+    plat.setStrokeStyle(2, 0x48edd4, 0.4);
+    plat.setDepth(4);
+
+    this.physics.add.existing(plat, true);
+    plat.body.checkCollision.none = true;
+
+    this.echoPlatforms.push(plat);
+  }
+
+  createSunCrystal(x, y, index) {
+    if (this.checkpointActivated && index < this.savedCrystals) {
+      return;
+    }
+
+    const container = this.add.container(x, y).setDepth(6);
+
+    const glow = this.add.circle(0, 0, 28, 0x5affea, 0.25);
+    const crystal = this.add.polygon(
+      0,
+      0,
+      [0, -22, 14, -6, 14, 12, 0, 24, -14, 12, -14, -6],
+      0x48edd4
+    );
+    crystal.setStrokeStyle(2, 0xffffff);
+
+    const innerShine = this.add.polygon(
+      0,
+      -3,
+      [0, -12, 6, -3, 6, 6, 0, 12, -6, 6, -6, -3],
+      0xffffff,
+      0.8
+    );
+
+    container.add([glow, crystal, innerShine]);
+
+    this.tweens.add({
+      targets: container,
+      y: y - 12,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+
+    this.tweens.add({
+      targets: glow,
+      scale: 1.4,
+      alpha: 0.4,
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+
+    const sensor = this.add.circle(x, y, 26, 0xffffff, 0);
+    this.physics.add.existing(sensor, true);
+    this.physics.add.overlap(this.player, sensor, () =>
+      this.collectCrystal(container, sensor, index)
+    );
+
+    this.crystals.push({ container, sensor, index });
+  }
+
+  createSpikes(xPositions) {
+    xPositions.forEach((x) => {
+      const spikeW = 90;
+      const spikeG = this.add.graphics();
+      spikeG.fillStyle(0x732219, 1);
+      spikeG.lineStyle(2, 0xff5c4d, 0.8);
+
+      for (let i = 0; i < 4; i++) {
+        const sx = x - spikeW / 2 + i * 22;
+        spikeG.beginPath();
+        spikeG.moveTo(sx, 484);
+        spikeG.lineTo(sx + 11, 452);
+        spikeG.lineTo(sx + 22, 484);
+        spikeG.closePath();
+        spikeG.fillPath();
+        spikeG.strokePath();
       }
-      g.setDepth(4);
+      spikeG.setDepth(5);
 
-      const hitbox = this.add.rectangle(x, 468, 100, 24, 0xff0000, 0);
-      this.physics.add.existing(hitbox, true);
-      this.physics.add.overlap(this.player, hitbox, () => this.damagePlayer(1));
-    });
-  }
-
-  createEchoPlatformGroup(positions) {
-    positions.forEach((p) => {
-      const barColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x47e8da);
-      const bar = this.add.rectangle(p.x, p.y, p.width, 18, barColor);
-      bar.setStrokeStyle(2, 0xffffff);
-      bar.setDepth(7);
-      bar.setAlpha(0);
-
-      const runeText = this.add
-        .text(p.x, p.y, "◆ ◆ ◆", {
-          fontSize: "12px",
-          color: "#ffffff",
-          fontStyle: "bold"
-        })
-        .setOrigin(0.5)
-        .setDepth(8)
-        .setAlpha(0);
-
-      this.physics.add.existing(bar, true);
-      bar.body.enable = false;
-      this.physics.add.collider(this.player, bar);
-
-      this.echoPlatforms.push({ bar, runeText });
-    });
-  }
-
-  createCrystalsGroup(positions) {
-    positions.forEach((p) => {
-      if (this.savedCrystals > p.id) return;
-
-      const container = this.add.container(p.x, p.y).setDepth(8);
-      const glowColor = this.currentLevel === 3 ? 0xff5722 : (this.currentLevel === 2 ? 0x448aff : 0x42f5d4);
-      const gemColor = this.currentLevel === 3 ? 0xff8a65 : (this.currentLevel === 2 ? 0x82b1ff : 0x67ffef);
-
-      const glow = this.add.circle(0, 0, 26, glowColor, 0.35);
-      const crystal = this.add.polygon(
-        0, 0,
-        [0, -18, 13, -6, 10, 13, 0, 20, -10, 13, -13, -6],
-        gemColor
-      );
-      crystal.setStrokeStyle(2, 0xffffff);
-      const core = this.add.polygon(
-        0, 0,
-        [0, -11, 7, -4, 6, 8, 0, 12, -6, 8, -7, -4],
-        0xffffff
-      );
-
-      container.add([glow, crystal, core]);
-
-      const sensor = this.add.circle(p.x, p.y, 26, 0xffffff, 0);
-      this.physics.add.existing(sensor, true);
-
-      this.physics.add.overlap(this.player, sensor, () => {
-        this.collectCrystal(container, sensor, p.id);
-      });
-
-      this.tweens.add({
-        targets: [crystal, core],
-        angle: 360,
-        duration: 2200,
-        repeat: -1
-      });
-      this.tweens.add({
-        targets: container,
-        y: p.y - 10,
-        duration: 1200,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.easeInOut"
-      });
-      this.tweens.add({
-        targets: glow,
-        scale: 1.5,
-        alpha: 0.5,
-        duration: 900,
-        yoyo: true,
-        repeat: -1
-      });
-
-      this.crystals.push({ container, sensor });
+      const hitArea = this.add.rectangle(x, 468, spikeW - 10, 24, 0xff0000, 0);
+      this.physics.add.existing(hitArea, true);
+      this.physics.add.overlap(this.player, hitArea, () => this.damagePlayer(1));
     });
   }
 
@@ -479,13 +660,12 @@ export default class GameScene extends Phaser.Scene {
   }
 
   createMovingPlatform(x, y, targetX) {
-    const platColor = this.currentLevel === 3 ? 0x5c2b20 : (this.currentLevel === 2 ? 0x3d4157 : 0x7a5232);
-    this.movingPlatform = this.add.rectangle(x, y, 135, 22, platColor);
+    this.movingPlatform = this.add.rectangle(x, y, 135, 22, 0x7a5232);
     this.physics.add.existing(this.movingPlatform, true);
     this.physics.add.collider(this.player, this.movingPlatform);
 
     const moss = this.add.graphics();
-    moss.fillStyle(this.cfg.groundMoss, 1);
+    moss.fillStyle(0x9fc84e, 1);
     moss.fillRoundedRect(-67, -11, 134, 7, 3);
     const container = this.add.container(x, y).setDepth(3);
     container.add(moss);
@@ -497,29 +677,32 @@ export default class GameScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
-      onUpdate: () => this.movingPlatform.body.updateFromGameObject()
+      onUpdate: () => {
+        if (this.movingPlatform.body && typeof this.movingPlatform.body.updateFromGameObject === "function") {
+          this.movingPlatform.body.updateFromGameObject();
+        }
+      }
     });
   }
 
-  createSwingingPendulum(pivotX, pivotY, length, fromAngle = -38, toAngle = 38, duration = 1800) {
-    const rope = this.add.container(pivotX, pivotY).setDepth(8);
-    const ropeLine = this.add.graphics();
-    ropeLine.lineStyle(9, 0x483222, 1);
-    ropeLine.lineBetween(0, 0, 0, length - 10);
-    rope.add(ropeLine);
+  createSwingingHazard(pivotX, pivotY, length, fromAngle, toAngle, duration) {
+    const rope = this.add.container(pivotX, pivotY).setDepth(5);
+    const line = this.add.graphics();
+    line.lineStyle(4, 0x3d271d);
+    line.lineBetween(0, 0, 0, length);
+    rope.add(line);
 
     const thornBall = this.add.graphics();
-    thornBall.fillStyle(this.currentLevel === 3 ? 0x5c1b18 : 0x654329, 1);
+    thornBall.fillStyle(0x654329, 1);
     thornBall.fillCircle(0, length, 28);
-    thornBall.fillStyle(this.cfg.groundMoss, 1);
+    thornBall.fillStyle(0x9fc84e, 1);
     thornBall.fillTriangle(-20, length - 8, -44, length - 22, -18, length + 2);
     thornBall.fillTriangle(20, length - 8, 44, length - 22, 18, length + 2);
     rope.add(thornBall);
 
+    // Static body for clean overlap detection
     const tip = this.add.circle(pivotX, pivotY + length, 30, 0xffffff, 0);
-    this.physics.add.existing(tip);
-    tip.body.setAllowGravity(false);
-    tip.body.setImmovable(true);
+    this.physics.add.existing(tip, true);
     this.physics.add.overlap(this.player, tip, () => this.damagePlayer(1));
 
     const hazard = { rope, tip, pivotX, pivotY, length };
@@ -535,81 +718,318 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  createRollingLog(x, y, minX, maxX, duration = 2500) {
-    const log = this.add.container(x, y).setDepth(9);
-    const logArt = this.add.graphics();
-    logArt.fillStyle(this.currentLevel === 3 ? 0x4a1815 : 0x6e4325, 1);
-    logArt.fillRoundedRect(-70, -22, 140, 44, 16);
-    logArt.lineStyle(4, 0x24100e, 1);
-    logArt.strokeRoundedRect(-70, -22, 140, 44, 16);
-    log.add(logArt);
+  createRollingLog(startX, startY, leftLimit, rightLimit) {
+    const log = this.add.container(startX, startY).setDepth(5);
+    const bodyRect = this.add.graphics();
+    bodyRect.fillStyle(0x5c3a21, 1);
+    bodyRect.fillRoundedRect(-32, -16, 64, 32, 8);
+    bodyRect.fillStyle(0x9fc84e, 1);
+    bodyRect.fillCircle(0, 0, 10);
+    log.add(bodyRect);
 
-    const sensor = this.add.rectangle(x, y, 125, 40, 0xffffff, 0);
-    this.physics.add.existing(sensor);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
+    const sensor = this.add.rectangle(startX, startY, 54, 28, 0xffffff, 0);
+    this.physics.add.existing(sensor, true);
     this.physics.add.overlap(this.player, sensor, () => this.damagePlayer(1));
 
     this.tweens.add({
       targets: [log, sensor],
-      x: { from: minX, to: maxX },
-      duration: duration,
+      x: rightLimit,
+      duration: 2200,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
-      onUpdate: () => sensor.body.updateFromGameObject()
+      onUpdate: () => {
+        if (sensor.body && typeof sensor.body.updateFromGameObject === "function") {
+          sensor.body.updateFromGameObject();
+        }
+      }
     });
-    this.tweens.add({ targets: log, angle: 360, duration: 1000, repeat: -1 });
+
+    this.tweens.add({
+      targets: log,
+      angle: 360,
+      duration: 1000,
+      repeat: -1
+    });
   }
 
-  createFallingBoulder(x, y, delay = 800) {
-    const rock = this.add.container(x, y).setDepth(8);
-    const rockArt = this.add.graphics();
-    rockArt.fillStyle(this.currentLevel === 3 ? 0x421b18 : 0x5a6860, 1);
+  createFallingBoulder(x, startY) {
+    const boulder = this.add.graphics();
+    boulder.fillStyle(0x616a6b, 1);
+    boulder.fillCircle(x, startY, 26);
+    boulder.fillStyle(0x485152, 1);
+    boulder.fillCircle(x - 6, startY - 6, 12);
+    boulder.setDepth(6);
 
-    const pts = [
-      { x: -36, y: -16 },
-      { x: -16, y: -38 },
-      { x: 18, y: -32 },
-      { x: 40, y: -4 },
-      { x: 26, y: 30 },
-      { x: -18, y: 32 },
-      { x: -40, y: 6 }
-    ];
-    rockArt.fillPoints(pts, true);
-    rockArt.lineStyle(4, 0x24100e, 1);
-    rockArt.strokePoints(pts, true);
-    rock.add(rockArt);
-
-    const sensor = this.add.rectangle(x, y, 65, 65, 0xffffff, 0);
-    this.physics.add.existing(sensor);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
+    const sensor = this.add.circle(x, startY, 24, 0xffffff, 0);
+    this.physics.add.existing(sensor, true);
     this.physics.add.overlap(this.player, sensor, () => this.damagePlayer(1));
 
     this.tweens.add({
-      targets: [rock, sensor],
-      y: 425,
-      duration: 800,
-      delay: delay,
+      targets: [boulder, sensor],
+      y: 470,
+      duration: 1200,
       yoyo: true,
       repeat: -1,
       repeatDelay: 1500,
       ease: "Quad.easeIn",
-      onUpdate: () => sensor.body.updateFromGameObject()
+      onUpdate: () => {
+        if (sensor.body && typeof sensor.body.updateFromGameObject === "function") {
+          sensor.body.updateFromGameObject();
+        }
+      }
     });
   }
 
+  createSolidPlatform(x, y, width = 140, height = 22) {
+    const plat = this.add.rectangle(x, y, width, height, 0x482d1c);
+    plat.setStrokeStyle(2, 0x27160c);
+    plat.setDepth(4);
+    this.physics.add.existing(plat, true);
+    this.physics.add.collider(this.player, plat);
+
+    const moss = this.add.graphics().setDepth(5);
+    moss.fillStyle(0x76a035, 1);
+    moss.fillRoundedRect(x - width / 2, y - height / 2 - 3, width, 8, 3);
+    moss.fillStyle(0x9fc84e, 1);
+    for (let i = 0; i < width - 15; i += 24) {
+      moss.fillRoundedRect(x - width / 2 + i + 4, y - height / 2 - 4, 16, 5, 2);
+    }
+
+    return plat;
+  }
+
+  createBouncyMushroom(x, y) {
+    const shroom = this.add.container(x, y).setDepth(5);
+
+    // Stem
+    const stem = this.add.graphics();
+    stem.fillStyle(0xd5e8d4, 1);
+    stem.fillRoundedRect(-10, -20, 20, 26, 6);
+
+    // Bioluminescent purple/cyan cap (matches game art)
+    const cap = this.add.graphics();
+    cap.fillStyle(0x7b1fa2, 1);
+    cap.fillEllipse(0, -22, 56, 28);
+    cap.fillStyle(0xba68c8, 1);
+    cap.fillEllipse(0, -26, 44, 18);
+    cap.fillStyle(0x48edd4, 0.95);
+    cap.fillCircle(-12, -26, 4);
+    cap.fillCircle(12, -24, 5);
+    cap.fillCircle(0, -30, 3);
+
+    // Pulsing aura glow
+    const aura = this.add.circle(0, -24, 32, 0xba68c8, 0.3);
+    this.tweens.add({
+      targets: aura,
+      scale: 1.35,
+      alpha: 0.1,
+      duration: 900,
+      yoyo: true,
+      repeat: -1
+    });
+
+    shroom.add([aura, stem, cap]);
+
+    // Spring trigger hitbox
+    const sensor = this.add.rectangle(x, y - 24, 48, 18, 0xff00ff, 0);
+    this.physics.add.existing(sensor, true);
+
+    this.physics.add.overlap(this.player, sensor, () => {
+      if (this.player.body.velocity.y >= -80) {
+        this.player.body.setVelocityY(-720);
+        this.player.play("hero-jump", true);
+        if (window.SoundManager && window.SoundManager.playJump) {
+          window.SoundManager.playJump();
+        }
+        this.createDustPuff(x, y - 20);
+
+        // Squash & stretch spring animation
+        this.tweens.add({
+          targets: shroom,
+          scaleY: 0.45,
+          scaleX: 1.35,
+          duration: 85,
+          yoyo: true,
+          ease: "Quad.easeOut"
+        });
+      }
+    });
+
+    return shroom;
+  }
+
+  createRootBarricade(x, y, width, height) {
+    const barricade = this.add.container(x, y).setDepth(6);
+
+    const art = this.add.graphics();
+    // Ancient tangled briar root trunks
+    art.fillStyle(0x2d1a0e, 1);
+    art.fillRoundedRect(-width / 2, -height / 2, width, height, 10);
+    art.lineStyle(3, 0x1a0f08, 1);
+    art.strokeRoundedRect(-width / 2, -height / 2, width, height, 10);
+
+    // Twisted roots and sharp thorns
+    art.fillStyle(0x422815, 1);
+    art.fillRoundedRect(-width / 2 + 6, -height / 2 + 10, width - 12, height - 20, 6);
+    art.lineStyle(3, 0x5a391e, 0.9);
+    art.lineBetween(-width / 2 + 5, -height / 2 + 15, width / 2 - 5, height / 2 - 15);
+    art.lineBetween(width / 2 - 5, -height / 2 + 25, -width / 2 + 5, height / 2 - 25);
+
+    // Bioluminescent moss & thorns
+    art.fillStyle(0x76a035, 1);
+    art.fillCircle(-width / 4, -height / 3, 6);
+    art.fillCircle(width / 4, height / 4, 8);
+
+    barricade.add(art);
+
+    // Solid physical collision body
+    const wall = this.add.rectangle(x, y, width, height, 0x000000, 0);
+    this.physics.add.existing(wall, true);
+    this.physics.add.collider(this.player, wall);
+
+    return wall;
+  }
+
+  createGuardianBarrier(x, y) {
+    this.guardianBarrierActive = true;
+    this.guardianBarrier = this.add.container(x, y).setDepth(9);
+
+    // Clean subtle barrier energy field (no runes, symbols, or strange letters)
+    const field = this.add.graphics();
+    field.fillStyle(0x3ae7c6, 0.15);
+    field.fillRoundedRect(-6, -100, 12, 200, 6);
+    field.lineStyle(2, 0x48edd4, 0.4);
+    field.strokeRoundedRect(-6, -100, 12, 200, 6);
+    this.guardianBarrier.add(field);
+
+    this.tweens.add({
+      targets: this.guardianBarrier,
+      alpha: { from: 0.25, to: 0.6 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+
+    // Solid physics blocker
+    this.barrierWall = this.add.rectangle(x, y, 28, 220, 0x000000, 0);
+    this.physics.add.existing(this.barrierWall, true);
+    this.barrierCollider = this.physics.add.collider(this.player, this.barrierWall, () => {
+      if (this.anaconda && this.anaconda.alive && this.anaconda.hp > 0) {
+        if (!this.barrierMessageCooldown) {
+          this.barrierMessageCooldown = true;
+          this.showMessage("Kill Giant Anaconda to cross!", 2000);
+          this.cameras.main.shake(150, 0.008);
+          this.time.delayedCall(2000, () => {
+            this.barrierMessageCooldown = false;
+          });
+        }
+      }
+    });
+  }
+
+  createReflectionBanner() {
+    if (this.currentLevel !== 3) return;
+
+    // Top screen reflection prompt in clear English
+    this.reflectionBanner = this.add.container(480, 96).setScrollFactor(0).setDepth(150).setAlpha(0);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x051d18, 0.94);
+    bg.fillRoundedRect(-190, -18, 380, 36, 10);
+    bg.lineStyle(2, 0x48edd4, 0.95);
+    bg.strokeRoundedRect(-190, -18, 380, 36, 10);
+
+    const txt = this.add
+      .text(0, 0, "⚡ Press Echo [E] to kill Giant Anaconda", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "15px",
+        fontStyle: "bold",
+        color: "#ffffff"
+      })
+      .setOrigin(0.5);
+
+    this.reflectionBanner.add([bg, txt]);
+
+    // Subtle breathing reflection glow
+    this.tweens.add({
+      targets: this.reflectionBanner,
+      scaleX: { from: 0.98, to: 1.02 },
+      scaleY: { from: 0.98, to: 1.02 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+  }
+
+  onAnacondaDefeated() {
+    this.guardianBarrierActive = false;
+
+    // Permanently destroy the reflection message
+    if (this.reflectionBanner) {
+      if (this.tweens && typeof this.tweens.killTweensOf === "function") {
+        this.tweens.killTweensOf(this.reflectionBanner);
+      }
+      this.reflectionBanner.destroy();
+      this.reflectionBanner = null;
+    }
+
+    // Shatter the ancient barrier with magical particle explosion
+    if (this.guardianBarrier) {
+      const bx = this.guardianBarrier.x;
+      const by = this.guardianBarrier.y;
+
+      for (let i = 0; i < 28; i++) {
+        const shard = this.add
+          .circle(
+            bx,
+            by + Phaser.Math.Between(-90, 90),
+            Phaser.Math.Between(3, 7),
+            0x5affea,
+            1
+          )
+          .setDepth(20);
+
+        const angle = Phaser.Math.Between(-180, 180) * (Math.PI / 180);
+        const speed = Phaser.Math.Between(80, 260);
+
+        this.tweens.add({
+          targets: shard,
+          x: shard.x + Math.cos(angle) * speed,
+          y: shard.y + Math.sin(angle) * speed,
+          alpha: 0,
+          scale: 0.1,
+          duration: Phaser.Math.Between(500, 900),
+          ease: "Quad.easeOut",
+          onComplete: () => shard.destroy()
+        });
+      }
+
+      this.cameras.main.flash(350, 90, 255, 230);
+      this.guardianBarrier.destroy();
+      this.guardianBarrier = null;
+    }
+
+    if (this.barrierCollider) {
+      this.barrierCollider.destroy();
+      this.barrierCollider = null;
+    }
+
+    if (this.barrierWall) {
+      this.barrierWall.destroy();
+      this.barrierWall = null;
+    }
+  }
+
   createExitPortal() {
-    this.portal = this.add.container(this.portalX, 420).setDepth(7);
+    this.portal = this.add.container(this.portalX, this.portalY).setDepth(7);
 
-    const outerColor = this.currentLevel === 3 ? 0x5c1815 : (this.currentLevel === 2 ? 0x221a4f : 0x14473e);
-    const ringColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x7c4dff : 0x3ae7c6);
+    this.portalOuter = this.add.ellipse(0, 0, 105, 120, 0x14473e, 0.85);
+    this.portalOuter.setStrokeStyle(4, 0x3ae7c6);
 
-    this.portalOuter = this.add.ellipse(0, 0, 105, 120, outerColor, 0.85);
-    this.portalOuter.setStrokeStyle(4, ringColor);
-
-    this.portalInner = this.add.ellipse(0, 0, 70, 92, outerColor, 0.6);
+    this.portalInner = this.add.ellipse(0, 0, 70, 92, 0x14473e, 0.6);
     this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xffffff, 0.7);
 
     this.portalRunes = this.add
@@ -628,8 +1048,7 @@ export default class GameScene extends Phaser.Scene {
       scale: 1.08,
       duration: 1200,
       yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut"
+      repeat: -1
     });
 
     this.tweens.add({
@@ -639,11 +1058,14 @@ export default class GameScene extends Phaser.Scene {
       repeat: -1
     });
 
-    this.portalTrigger = this.add.rectangle(this.portalX, 420, 110, 130, 0xffffff, 0);
+    this.portalTrigger = this.add.rectangle(this.portalX, this.portalY, 110, 130, 0xffffff, 0);
     this.physics.add.existing(this.portalTrigger, true);
     this.physics.add.overlap(this.player, this.portalTrigger, () => this.enterPortal());
   }
 
+  // ==========================================
+  // HUD & CONTROLS
+  // ==========================================
   createHUD() {
     this.hudBar = this.add
       .rectangle(480, 24, 960, 48, 0x071513, 0.85)
@@ -653,8 +1075,8 @@ export default class GameScene extends Phaser.Scene {
     this.healthText = this.add
       .text(20, 24, "HEALTH: ♥ ♥ ♥", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
-        color: "#ff5252",
+        fontSize: "14px",
+        color: "#ff6b81",
         fontStyle: "bold"
       })
       .setOrigin(0, 0.5)
@@ -664,8 +1086,8 @@ export default class GameScene extends Phaser.Scene {
     this.crystalText = this.add
       .text(175, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "15px",
-        color: "#5cffe8",
+        fontSize: "13px",
+        color: "#48edd4",
         fontStyle: "bold"
       })
       .setOrigin(0, 0.5)
@@ -695,7 +1117,9 @@ export default class GameScene extends Phaser.Scene {
 
       btn.on("pointerdown", () => {
         if (!isUnlocked) {
-          audioManager.playHurt();
+          if (window.SoundManager && window.SoundManager.playLock) {
+            window.SoundManager.playLock();
+          }
           this.showMessage(`🔒 LEVEL ${lvl} LOCKED! Complete Level ${lvl - 1} first.`, 2200);
           this.tweens.add({
             targets: btn,
@@ -706,8 +1130,8 @@ export default class GameScene extends Phaser.Scene {
           });
           return;
         }
-        audioManager.playJump();
-        this.scene.restart({ level: lvl });
+        window.SoundManager.playLevelStart();
+        this.scene.start("GameScene", { level: lvl });
       });
     });
 
@@ -761,9 +1185,26 @@ export default class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     this.muteBtn.on("pointerdown", () => {
-      const isMuted = audioManager.toggleMute();
-      this.muteBtn.setText(isMuted ? "🔇 SFX" : "🔊 SFX");
-      this.muteBtn.setStyle({ backgroundColor: isMuted ? "#451616" : "#164539" });
+      const isMuted = window.SoundManager.toggleMute();
+      this.muteBtn.setText(isMuted ? "🔇 MUTED" : "🔊 SFX");
+    });
+
+    this.menuBtn = this.add
+      .text(900, 24, "☰ MENU", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "12px",
+        color: "#ffffff",
+        backgroundColor: "#143f34",
+        padding: { x: 8, y: 4 },
+        fontStyle: "bold"
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({ useHandCursor: true });
+
+    this.menuBtn.on("pointerdown", () => {
+      this.scene.start("MenuScene");
     });
 
     this.portalMessage = this.add
@@ -771,12 +1212,9 @@ export default class GameScene extends Phaser.Scene {
         fontFamily: "Arial, sans-serif",
         fontSize: "17px",
         fontStyle: "bold",
-        color: "#ffffff",
-        backgroundColor: "#123b30",
-        padding: { x: 16, y: 9 },
-        stroke: "#0a1f1a",
-        strokeThickness: 3,
-        align: "center"
+        color: "#48edd4",
+        backgroundColor: "#051d19",
+        padding: { x: 18, y: 8 }
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -805,108 +1243,132 @@ export default class GameScene extends Phaser.Scene {
     this.input.on("pointerup", () => {
       this.mobileLeft = false;
       this.mobileRight = false;
-      this.mobileJump = false;
     });
   }
 
-  createTouchButton(x, y, label, down, up, bg = "#1b4435", border = "#42b892") {
+  createTouchButton(x, y, label, onDown, onUp = () => {}, bgColor = "#124036", strokeColor = "#3ae7c6") {
     const btn = this.add
+      .circle(x, y, 38, Phaser.Display.Color.HexStringToColor(bgColor).color, 0.75)
+      .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(strokeColor).color)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive();
+
+    const txt = this.add
       .text(x, y, label, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "18px",
-        color: "#ffffff",
-        backgroundColor: bg,
-        padding: { x: 16, y: 14 },
-        fontStyle: "bold"
+        fontSize: label.length > 2 ? "13px" : "24px",
+        fontStyle: "bold",
+        color: "#ffffff"
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(200)
-      .setInteractive({ useHandCursor: true });
-
-    btn.setStyle({ stroke: border, strokeThickness: 2 });
+      .setDepth(201);
 
     btn.on("pointerdown", () => {
       btn.setScale(0.92);
-      audioManager.ensureContext();
-      down();
+      onDown();
     });
 
     btn.on("pointerup", () => {
       btn.setScale(1);
-      up();
+      onUp();
     });
 
     btn.on("pointerout", () => {
       btn.setScale(1);
-      up();
+      onUp();
     });
-
-    return btn;
   }
 
+  // ==========================================
+  // UPDATE LOOP & MECHANICS
+  // ==========================================
   update(time, delta) {
-    if (!this.player || !this.player.active || this.levelComplete) return;
+    if (this.levelComplete) return;
 
     if (this.anaconda) {
-      this.anaconda.update();
+      this.anaconda.update(time, delta);
     }
 
-    const left = this.cursors.left.isDown || this.keyA.isDown || this.mobileLeft;
-    const right = this.cursors.right.isDown || this.keyD.isDown || this.mobileRight;
-    const jumpPressed =
-      Phaser.Input.Keyboard.JustDown(this.keySpace) ||
-      Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
-      Phaser.Input.Keyboard.JustDown(this.keyW) ||
+    if (this.pathSnakes && this.pathSnakes.length > 0) {
+      this.pathSnakes.forEach((snake) => snake.update(time, delta));
+    }
+
+    const onGround = this.player.body.touching.down || this.player.body.blocked.down;
+
+    const moveLeft = this.cursors.left.isDown || this.keyA.isDown || this.mobileLeft;
+    const moveRight = this.cursors.right.isDown || this.keyD.isDown || this.mobileRight;
+    const jump =
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+      Phaser.Input.Keyboard.JustDown(this.keyW) ||
+      Phaser.Input.Keyboard.JustDown(this.keySpace) ||
       this.mobileJump;
 
-    if (left && !right) {
-      this.player.body.setVelocityX(-260);
-      this.player.setFlipX(true);
-    } else if (right && !left) {
-      this.player.body.setVelocityX(260);
-      this.player.setFlipX(false);
-    } else {
-      this.player.body.setVelocityX(0);
-    }
-
-    const grounded = this.player.body.blocked.down || this.player.body.touching.down;
-
-    if (jumpPressed && grounded) {
-      this.player.body.setVelocityY(-470);
-      audioManager.playJump();
-      this.createDustPuff(this.player.x, this.player.y);
-    }
-    this.mobileJump = false;
-
-    if (grounded && (left || right)) {
-      this.stepTimer += delta;
-      if (this.stepTimer > 280) {
-        audioManager.playFootstep();
-        this.stepTimer = 0;
-      }
-    }
-
-    if (!grounded) {
-      this.player.play("hero-jump", true);
-    } else if (left || right) {
-      this.player.play("hero-run", true);
-    } else {
-      this.player.play("hero-idle", true);
+    if (this.mobileJump) {
+      this.mobileJump = false;
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
       this.activateEcho();
     }
 
+    if (moveLeft) {
+      this.player.body.setVelocityX(-250);
+      this.player.setFlipX(true);
+      if (onGround) {
+        this.player.play("hero-run", true);
+        this.stepTimer += delta;
+        if (this.stepTimer > 280) {
+          window.SoundManager.playFootstep();
+          this.createDustPuff(this.player.x + 8, this.player.y);
+          this.stepTimer = 0;
+        }
+      }
+    } else if (moveRight) {
+      this.player.body.setVelocityX(250);
+      this.player.setFlipX(false);
+      if (onGround) {
+        this.player.play("hero-run", true);
+        this.stepTimer += delta;
+        if (this.stepTimer > 280) {
+          window.SoundManager.playFootstep();
+          this.createDustPuff(this.player.x - 8, this.player.y);
+          this.stepTimer = 0;
+        }
+      }
+    } else {
+      this.player.body.setVelocityX(0);
+      if (onGround) {
+        this.player.play("hero-idle", true);
+      }
+    }
+
+    if (jump && onGround) {
+      this.player.body.setVelocityY(-570);
+      window.SoundManager.playJump();
+      this.player.play("hero-jump", true);
+      this.createDustPuff(this.player.x, this.player.y);
+    }
+
+    if (!onGround && this.player.body.velocity.y > 0) {
+      this.player.play("hero-land", true);
+    }
+
+    // Update swinging pendulums with safe position sync
     if (this.swingingHazards && this.swingingHazards.length > 0) {
       this.swingingHazards.forEach((h) => {
         const rot = h.rope.rotation;
         const tipX = h.pivotX + Math.sin(rot) * h.length;
         const tipY = h.pivotY + Math.cos(rot) * h.length;
         h.tip.setPosition(tipX, tipY);
-        h.tip.body.updateFromGameObject();
+        if (h.tip.body) {
+          if (typeof h.tip.body.updateFromGameObject === "function") {
+            h.tip.body.updateFromGameObject();
+          } else if (typeof h.tip.body.reset === "function") {
+            h.tip.body.reset(tipX, tipY);
+          }
+        }
       });
     }
 
@@ -922,79 +1384,102 @@ export default class GameScene extends Phaser.Scene {
     this.progressBarFill.width = 130 * progress;
     this.progressMarker.x = 505 + 130 * progress;
 
+    // Reflection Message handling in Level 3:
+    // Visible only when visiting near the Giant Anaconda, and permanently destroyed when Anaconda is died
+    if (this.currentLevel === 3 && this.reflectionBanner) {
+      if (this.anaconda && this.anaconda.alive && this.anaconda.hp > 0) {
+        const nearAnaconda = this.player.x >= 2820 && this.player.x <= 3450;
+        const targetAlpha = nearAnaconda ? 1 : 0;
+        if (Math.abs(this.reflectionBanner.alpha - targetAlpha) > 0.05) {
+          this.reflectionBanner.alpha += (targetAlpha - this.reflectionBanner.alpha) * 0.12;
+        } else {
+          this.reflectionBanner.alpha = targetAlpha;
+        }
+      } else {
+        this.reflectionBanner.destroy();
+        this.reflectionBanner = null;
+      }
+    }
+
     if (this.player.y > 560) {
       this.respawnPlayer();
-      this.damagePlayer(1);
     }
   }
 
   activateEcho() {
-    if (this.echoActive || this.levelComplete) return;
+    if (this.echoActive) return;
 
     this.echoActive = true;
-    audioManager.playEchoPulse();
-
+    window.SoundManager.playEchoPulse();
     this.createEchoWave(this.player.x, this.player.y);
 
-    if (
-      this.anaconda &&
-      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 680
-    ) {
-      this.anaconda.stun();
-    }
+    // Solidify hidden echo platforms
+    this.echoPlatforms.forEach((plat) => {
+      plat.setAlpha(1);
+      plat.setFillStyle(0x3ae7c6, 0.9);
+      plat.body.checkCollision.none = false;
 
-    this.echoPlatforms.forEach((p) => {
-      p.bar.body.enable = true;
       this.tweens.add({
-        targets: [p.bar, p.runeText],
-        alpha: 1,
-        duration: 250
+        targets: plat,
+        alpha: 0.18,
+        duration: this.echoDuration,
+        ease: "Quad.easeIn",
+        onComplete: () => {
+          plat.setFillStyle(0x1f5c49, 0.18);
+          plat.body.checkCollision.none = true;
+        }
       });
     });
 
-    this.showMessage("ECHO PULSE RESONATES! PATHWAYS REVEALED", 1600);
-    this.echoLabel.setText("ACTIVE");
+    // Stun any Path Snakes within pulse range
+    if (this.pathSnakes && this.pathSnakes.length > 0) {
+      let stunnedCount = 0;
+      this.pathSnakes.forEach((snake) => {
+        if (!snake.alive) return;
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, snake.x, snake.y);
+        if (dist < 420) {
+          snake.stun(3500);
+          stunnedCount++;
+        }
+      });
+      if (stunnedCount > 0) {
+        this.showMessage(`⚡ ${stunnedCount} VIPER${stunnedCount > 1 ? "S" : ""} STUNNED WITH ECHO PULSE!`, 1800);
+      }
+    }
+
+    // Stun the Anaconda Boss if within pulse range
+    if (this.anaconda && this.anaconda.alive) {
+      const dist = Math.abs(this.player.x - this.anaconda.x);
+      if (dist < 520) {
+        this.anaconda.stun(3200);
+        this.showMessage("ANACONDA GUARDIAN STUNNED!", 1800);
+      }
+    }
 
     this.tweens.add({
       targets: this.echoGaugeFill,
       width: 0,
-      duration: this.echoDuration,
-      ease: "Linear"
-    });
-
-    this.time.delayedCall(this.echoDuration, () => {
-      this.echoPlatforms.forEach((p) => {
-        this.tweens.add({
-          targets: [p.bar, p.runeText],
-          alpha: 0,
-          duration: 350,
-          onComplete: () => {
-            p.bar.body.enable = false;
-          }
+      duration: 300,
+      onComplete: () => {
+        this.time.delayedCall(this.echoDuration, () => {
+          this.tweens.add({
+            targets: this.echoGaugeFill,
+            width: 75,
+            duration: 600,
+            onComplete: () => {
+              this.echoActive = false;
+            }
+          });
         });
-      });
-
-      this.echoActive = false;
-      this.echoLabel.setText("RECHARGE");
-
-      this.tweens.add({
-        targets: this.echoGaugeFill,
-        width: 75,
-        duration: 1400,
-        ease: "Linear",
-        onComplete: () => {
-          this.echoLabel.setText("ECHO [E]");
-        }
-      });
+      }
     });
   }
 
   createEchoWave(x, y) {
-    const waveColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x48edd4);
     for (let r = 0; r < 3; r++) {
       this.time.delayedCall(r * 90, () => {
-        const ring = this.add.circle(x, y - 40, 20, waveColor, 0);
-        ring.setStrokeStyle(3, waveColor, 0.9);
+        const ring = this.add.circle(x, y - 40, 20, 0x48edd4, 0);
+        ring.setStrokeStyle(3, 0x5affea, 0.9);
         ring.setDepth(20);
 
         this.tweens.add({
@@ -1017,7 +1502,7 @@ export default class GameScene extends Phaser.Scene {
         x + Phaser.Math.Between(-15, 15),
         y - 4,
         Phaser.Math.Between(3, 6),
-        this.cfg.groundMoss,
+        0x90b56b,
         0.7
       );
       dust.setDepth(12);
@@ -1037,16 +1522,14 @@ export default class GameScene extends Phaser.Scene {
     if (!sensor.active) return;
 
     sensor.destroy();
-    audioManager.playCrystal();
-
-    const burstColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x5affea);
+    window.SoundManager.playCrystal();
 
     for (let i = 0; i < 16; i++) {
       const spark = this.add.circle(
         container.x,
         container.y,
         Phaser.Math.Between(2, 5),
-        burstColor,
+        0x5affea,
         1
       );
       spark.setDepth(25);
@@ -1091,7 +1574,7 @@ export default class GameScene extends Phaser.Scene {
   activateCheckpoint() {
     this.checkpointActivated = true;
     this.checkpointX = this.checkpointTargetX;
-    audioManager.playCheckpoint();
+    window.SoundManager.playCheckpoint();
 
     this.checkpointFlag.setFillStyle(0xffd54f);
     this.checkpointLight.setFillStyle(0xffea00, 0.9);
@@ -1112,7 +1595,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.damageCooldown = true;
     this.health = Math.max(0, this.health - amount);
-    audioManager.playHurt();
+    window.SoundManager.playHurt();
 
     this.healthText.setText("HEALTH: " + "♥ ".repeat(this.health));
 
@@ -1157,8 +1640,13 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Level 3 Boss Gate: The Giant Anaconda must be subdued
+    if (this.currentLevel === 3 && this.anaconda && this.anaconda.alive && this.anaconda.hp > 0) {
+      this.showMessage("⚡ DEFEAT ANACONDA GUARDIAN WITH ECHO PULSE [E] TO UNLOCK PORTAL!", 2800);
+      return;
+    }
+
     this.levelComplete = true;
-    audioManager.playVictory();
     this.physics.pause();
     this.player.setVelocity(0, 0);
 
@@ -1174,47 +1662,13 @@ export default class GameScene extends Phaser.Scene {
       } catch (e) {}
     }
 
-    const isLast = this.currentLevel >= 3;
-    const nextLvl = this.currentLevel + 1;
-
-    // Victory Screen overlay
-    const overlay = this.add.rectangle(480, 270, 960, 540, 0x051a14, 0.94).setScrollFactor(0).setDepth(500);
-    const glow = this.add.circle(480, 180, 140, 0x48edd4, 0.16).setScrollFactor(0).setDepth(501);
-
-    const title = this.add.text(480, 140, isLast ? "SANCTUM CLEARED!" : `LEVEL ${this.currentLevel} COMPLETE!`, {
-      fontFamily: "Georgia, serif",
-      fontSize: "46px",
-      fontStyle: "bold",
-      color: "#ffdf6d",
-      stroke: "#194a36",
-      strokeThickness: 8
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
-
-    const sub = this.add.text(480, 205, isLast ? "THE LOST LIGHT OF VERIDIA IS FULLY RESTORED" : "PATHWAY TO NEXT REALM UNLOCKED", {
-      fontFamily: "Arial, sans-serif",
-      fontSize: "15px",
-      fontStyle: "bold",
-      color: "#99f3de",
-      letterSpacing: 2
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
-
-    const stars = this.add.text(480, 260, "★  ★  ★", {
-      fontFamily: "Georgia, serif",
-      fontSize: "36px",
-      color: "#ffdf6d"
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
-
-    const nextBtn = this.add.text(480, 360, isLast ? "🏆 REPLAY FULL ADVENTURE (LEVEL 1)" : `NEXT: LEVEL ${nextLvl} ➔`, {
-      fontFamily: "Arial, sans-serif",
-      fontSize: "17px",
-      fontStyle: "bold",
-      color: "#051814",
-      backgroundColor: isLast ? "#ffdf6d" : "#48edd4",
-      padding: { x: 26, y: 13 }
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(502).setInteractive({ useHandCursor: true });
-
-    nextBtn.on("pointerdown", () => {
-      this.scene.restart({ level: isLast ? 1 : nextLvl });
+    this.cameras.main.fade(500, 5, 26, 20);
+    this.time.delayedCall(500, () => {
+      this.scene.start("VictoryScene", {
+        level: this.currentLevel,
+        crystals: this.crystalsCollected,
+        maxCrystals: this.totalCrystals
+      });
     });
   }
 
@@ -1229,3 +1683,5 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 }
+
+export default GameScene;

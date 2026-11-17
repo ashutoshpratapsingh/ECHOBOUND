@@ -1,82 +1,61 @@
-# ECHOBOUND: The Lost Light – Game Concept & Design Document
+# ECHOBOUND: Realms of Echo – Game Concept & Mechanics Document
 
-## 1. Executive Summary
-**ECHOBOUND: The Lost Light** is an atmospheric 2D cinematic platformer developed for Web and Mobile platforms using Phaser.js. Set within the bioluminescent canopy of an ancient rainforest, the game pairs fluid platforming navigation with an original core mechanic: the **Echo Pulse**. 
+## 1. High Concept & Creative Premise
+**ECHOBOUND: Realms of Echo** is an original 2D atmospheric jungle adventure platformer designed for Web and Mobile platforms using Phaser.js. 
 
-Players control **Kael**, a nimble jungle youth armed with an ancestral bio-acoustic resonance talisman. By projecting acoustic pulses into his surroundings, Kael can reveal forgotten ethereal pathways, disorient apex predators such as the colossal **Anaconda Guardian**, and restore the three sacred **Lumina Crystals** required to reopen the ancient light portal.
-
----
-
-## 2. Core Premise & Narrative
-The deep forest of *Veridia* was once kept in balance by the three Sun-Forged Lumina Crystals resting within the Great Canopy Portal. A shadowy blight shattered the portal, scattering the crystals across dangerous ruins and causing the wild creatures to grow hyper-aggressive.
-
-Armed only with his agility and the sacred Echo Talisman, Kael ventures into the dense lower jungle. To survive the treacherous obstacles, swinging thorn vines, tumbling logs, falling boulders, and territorial apex predators, he must learn to read the environment through sound.
+The player controls **Kael**, a courageous youth exploring the forgotten rainforest canopy of *Veridia*. Veridia's life energy is powered by the **Lumina Sun Gateways**, which have fallen silent. Armed with an ancient bio-acoustic resonance amulet, Kael can project the **Echo Pulse**—an acoustic sonar wave that reveals invisible ancient ruins, dazes apex predators, and allows traversal of treacherous chasms.
 
 ---
 
-## 3. The Core Innovation: "Echo Pulse"
-While traditional platformers rely purely on jumping and dodging, ECHOBOUND integrates **acoustic perception** as a dual puzzle-solving and combat-survival mechanic:
+## 2. Core Innovation: The "Echo Pulse" Mechanic
+While traditional platformers rely solely on running and jumping, ECHOBOUND introduces acoustic sonar resonance as a central dual-function mechanic:
 
-### Mechanic Specifications:
-1. **Sonar Wave Expansion**:
-   - Pressing `E` (or tapping the mobile `ECHO` button) triggers concentric sonar shockwaves radiating from Kael.
-   - Accompanying audio: Synthesized sub-bass resonance transitioning into a high-frequency shimmering ping.
-2. **Ethereal Platform Solidification**:
-   - The forest contains ancient ruins invisible to the naked eye.
-   - When struck by the Echo Pulse, these translucent cyan stepping stones illuminate and solidify for **3.2 seconds**, providing temporary bridges across hazardous pits and elevated shortcuts.
-   - A real-time HUD gauge drains during the active window and recharges smoothly.
-3. **Predator Stun & Repulsion**:
-   - Apex predators like the **Anaconda Guardian** rely on thermal and kinetic senses. The high-frequency acoustic shockwave overloads their sensory organs.
-   - Striking the Anaconda with an Echo Pulse induces a **4.0-second stun state**, recoiling the beast, displaying dizzy stars, disabling its venom spit and lunge strikes, and opening a window for safe traversal.
+1. **Acoustic Bridge Solidification**:
+   - The ancient canopy contains forgotten ethereal structures (`Echo Platforms`).
+   - Triggering the Echo Pulse (`E` on desktop, `ECHO` touch button on mobile) radiates concentric sonar shockwaves from the hero.
+   - For **3.2 seconds**, ethereal cyan platforms solidify with glowing runes, allowing the player to cross chasms, ascend vertical walls, and reach secret high-canopy crystals.
+   - A dynamic HUD gauge drains during the active window and smoothly recharges.
+2. **Predator Sensory Stun**:
+   - The forest's apex predator—the colossal **Anaconda Guardian**—relies on sensitive heat and kinetic vibration tracking.
+   - Projecting an Echo Pulse overloads the serpent's sensory organs, inducing a **4.0-second stun state** where it recoils backward with dizzy spinning stars overhead, halting all lunge strikes and acidic venom projectiles.
 
 ---
 
-## 4. Gameplay Progression & Level 1 Architecture
-Level 1 is crafted as a continuous, progressively challenging 4,200-pixel scrolling world divided into four distinct gameplay beats:
+## 3. The 3-Level Progression Structure
 
 ```
-[Start: x=100] ──> [Section 1: The Outskirts & Crystal #1] (x=100-800)
-                 └── Introduces movement, jump, first spike pit, and Crystal #1.
-                 
-[Section 2: Resonant Chasm] (x=800-1800)
-                 └── Echo platform tutorial, swinging thorn pendulum, moving mossy platform.
-                 
-[Section 3: Temple Ruins & Checkpoint] (x=1800-2800)
-                 └── Rolling thorn log, Crystal #2 on altar, golden checkpoint totem, falling boulder.
-                 
-[Section 4: Anaconda's Lair & Crystal #3] (x=2800-3650)
-                 └── Ancient Banyan tree, territorial Anaconda Guardian (lunge + venom attacks).
-                 └── Solution: Echo Pulse stuns snake and reveals high canopy platforms to Crystal #3!
-                 
-[Section 5: The Lost Light Portal] (x=3650-4200)
-                 └── Final leap over spike chasm to the radiant 3-crystal awakened exit portal.
+[MENU / LEVEL SELECT] 
+       │
+       ├──► LEVEL 1: The Whispering Canopy (2,800px)
+       │    • Pacing: Tutorial & introduction to Echo Pulse.
+       │    • Obstacles: Ground thorn spikes, floating stepping stones.
+       │    • Collectibles: 3 Sun Crystals to awaken the Gateway.
+       │    • Checkpoint: Golden Sun Totem at x=1750.
+       │
+       ├──► LEVEL 2: The Ancient Chasm (3,400px)
+       │    • Pacing: Precision timing & dynamic organic physics hazards.
+       │    • Obstacles: Moving mossy platforms, swinging thorn morningstar pendulum,
+       │      rolling spiked logs, falling canopy boulder traps.
+       │    • Collectibles: 3 Moon Crystals.
+       │    • Checkpoint: Totem at x=2200.
+       │
+       └──► LEVEL 3: The Anaconda Guardian's Sanctum (3,800px)
+            • Pacing: Climax & multi-phase boss encounter!
+            • Boss AI: Coiled Anaconda on ancient Banyan tree with alert cues,
+              downward lunge attacks, and venom spit projectiles.
+            • Counter-play: Echo Pulse stuns the boss and reveals high canopy
+              platforms to collect the final Lumina Heart Crystal.
+            • Grand Finale: Entering the awakened Great Sun Portal.
 ```
 
 ---
 
-## 5. Gameplay Systems Overview
+## 4. Systems Architecture
 | System | Implementation | Player Feedback |
 | :--- | :--- | :--- |
-| **Movement & Physics** | Arcade Physics with precise acceleration, deceleration, and custom foot hitbox | Running dust puffs, footstep audio, responsive air control |
-| **Echo Pulse** | Dynamic circle tweens, delayed platform physics activation, stun radius broadcast | Concentric cyan shockwaves, screen flash, audio ping, HUD cooldown bar |
-| **Anaconda AI** | Proximity state machine: `IDLE` -> `ALERT` -> `LUNGE` / `VENOM SPIT` -> `STUNNED` | Alert exclamation mark, venom particle projectile, dazed stars, hiss SFX |
-| **Health & Damage** | 3 Hearts, invulnerability frames (800ms), camera shake, red damage flash | Heart UI depletion, hurt knockback audio, checkpoint respawn |
-| **Checkpoints** | Interactive totem at x=2450 that remembers coordinates upon player passage | Flag color change from gray to gold, glowing light pulse, chime audio |
-| **Crystal Restoration**| 3 faceted collectibles required to awaken the exit portal | Shimmering particle burst, dual-chime audio, portal unlock animation |
-
----
-
-## 6. Controls & Platform Ergonomics
-
-### Web / Desktop:
-- **Left / Right Movement**: `A` / `D` or `Arrow Left` / `Arrow Right`
-- **Jump**: `Spacebar`, `W`, or `Arrow Up`
-- **Echo Pulse**: `E`
-- **Audio Toggle**: Interactive HUD Button (`🔊 SFX ON` / `🔇 SFX OFF`)
-- **Restart**: `Enter` on Game Over / Victory screen
-
-### Mobile / Touch Devices:
-- **Left / Right**: Ergonomic virtual directional buttons on lower-left screen.
-- **Jump**: Dedicated high-contrast green action button on lower-right screen.
-- **Echo Pulse**: Dedicated cyan resonant ability button adjacent to Jump.
-- **Viewport Scaling**: Fully responsive Phaser FIT mode scaling smoothly to 16:9, portrait, or landscape tablet screens with `touch-action: none` to eliminate browser swipe conflicts.
+| **Hero Agility** | Arcade Physics with custom foot-anchored hitbox | Running dust puffs, synthesized footsteps, responsive jump glide |
+| **Echo Pulse** | Concentric circle tweens, delayed physics activation, stun radius broadcast | Concentric cyan shockwaves, screen flash, audio ping, HUD cooldown gauge |
+| **Boss AI** | 5-state machine (`IDLE` -> `ALERT` -> `LUNGE` / `VENOM` -> `STUNNED`) | Warning hiss, red eye flare, alert badge (`!`), dazed spinning stars |
+| **Hazard Physics** | Trigonometric pendulum kinematics, linear patrolling, drop-pause-retract cycles | Motion telegraphs, collision impact sounds, screen shake |
+| **Procedural Audio**| Real-time Web Audio API synthesis (0 external asset files) | Zero latency, zero 404s, interactive HUD mute toggle |
+| **Dual Controls** | Keyboard (`WASD`/`Space`/`E`) + Mobile Touch (`◀`, `▶`, `JUMP`, `ECHO`) | `touch-action: none` viewport lock, high contrast buttons |

@@ -1,6 +1,4 @@
-/**
- * ECHOBOUND - Victory & Level Progression Scene
- */
+import Phaser from "phaser";
 
 class VictoryScene extends Phaser.Scene {
   constructor() {
@@ -205,4 +203,4 @@ class VictoryScene extends Phaser.Scene {
   }
 }
 
-window.VictoryScene = VictoryScene;
+export default VictoryScene;
