@@ -44,6 +44,7 @@ if (enterGameButton) {
     try {
       if (!document.fullscreenElement && gameContainer) {
         await gameContainer.requestFullscreen();
+        window.game.scale.refresh();
       }
 
       if (screen.orientation?.lock) {

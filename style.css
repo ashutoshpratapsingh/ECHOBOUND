@@ -137,3 +137,29 @@ canvas {
     font-size: 14px;
   }
 }
+
+
+/* Force the game container to fill the fullscreen viewport */
+#game-container:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #050f0e !important;
+}
+
+/* Make Phaser canvas use the available fullscreen area */
+#game-container:fullscreen canvas {
+  display: block !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
