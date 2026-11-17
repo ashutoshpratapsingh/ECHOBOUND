@@ -1,6 +1,10 @@
 /**
  * ECHOBOUND - Title & Level Select Scene
- * Allows direct access to all levels (Level 1, Level 2, Level 3) or sequential play.
+ * Handles progressive level progression:
+ * - Level 1: Always unlocked
+ * - Level 2: Locked until Level 1 is completed
+ * - Level 3: Locked until Level 1 and Level 2 are completed
+ * State persisted via localStorage ("echobound_unlocked_level")
  */
 
 class MenuScene extends Phaser.Scene {
@@ -8,9 +12,26 @@ class MenuScene extends Phaser.Scene {
     super("MenuScene");
   }
 
+  getUnlockedLevel() {
+    try {
+      const val = parseInt(localStorage.getItem("echobound_unlocked_level"), 10);
+      if (isNaN(val) || val < 1) return 1;
+      return Math.min(val, 3);
+    } catch (e) {
+      return 1;
+    }
+  }
+
+  setUnlockedLevel(level) {
+    try {
+      localStorage.setItem("echobound_unlocked_level", String(level));
+    } catch (e) {}
+  }
+
   create() {
     const width = 960;
     const height = 540;
+    const unlockedLevel = this.getUnlockedLevel();
 
     // Dark lush jungle backdrop
     this.add.rectangle(width / 2, height / 2, width, height, 0x061413);
@@ -43,7 +64,7 @@ class MenuScene extends Phaser.Scene {
     }
 
     // Glowing cyan ambient aura
-    const aura = this.add.circle(width / 2, 160, 180, 0x48edd4, 0.12);
+    const aura = this.add.circle(width / 2, 150, 180, 0x48edd4, 0.12);
     this.tweens.add({
       targets: aura,
       scale: 1.3,
@@ -55,9 +76,9 @@ class MenuScene extends Phaser.Scene {
 
     // Main Game Title
     this.add
-      .text(width / 2, 85, "ECHOBOUND", {
+      .text(width / 2, 75, "ECHOBOUND", {
         fontFamily: "Georgia, serif",
-        fontSize: "54px",
+        fontSize: "52px",
         fontStyle: "bold",
         color: "#ffffff",
         stroke: "#144837",
@@ -66,7 +87,7 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, 135, "REALMS OF ECHO  •  THE LOST LIGHT", {
+      .text(width / 2, 122, "REALMS OF ECHO  •  THE LOST LIGHT", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#67ffef",
@@ -75,19 +96,22 @@ class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // Progression subtitle
+    const statusText =
+      unlockedLevel === 1
+        ? "PROGRESSION: LEVEL 1 UNLOCKED (CONQUER LEVEL 1 TO REACH THE CHASM)"
+        : unlockedLevel === 2
+        ? "PROGRESSION: LEVEL 2 UNLOCKED (CONQUER LEVEL 2 TO REACH THE SANCTUM)"
+        : "PROGRESSION: ALL REALMS UNLOCKED • MASTER OF ECHO";
+
     this.add
-      .text(
-        width / 2,
-        175,
-        "Select any level below to play directly, or start from the beginning.\nCast the Echo Pulse [E] to solidify pathways and stun predators.",
-        {
-          fontFamily: "Arial, sans-serif",
-          fontSize: "13px",
-          color: "#bde8dc",
-          align: "center",
-          lineSpacing: 4
-        }
-      )
+      .text(width / 2, 155, statusText, {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "12px",
+        color: unlockedLevel >= 3 ? "#ffdf6d" : (unlockedLevel >= 2 ? "#67c4ff" : "#98d6c8"),
+        fontStyle: "bold",
+        letterSpacing: 1
+      })
       .setOrigin(0.5);
 
     // ==========================================
@@ -98,31 +122,37 @@ class MenuScene extends Phaser.Scene {
         num: 1,
         title: "LEVEL 1: THE CANOPY",
         badge: "PLAY LEVEL 1 ➔",
-        desc: "Whispering Woods • Echo Platforms • Spike Pits • 3 Sun Crystals",
+        desc: "Sunlit Rainforest • Echo Platforms • Spike Pits • 3 Sun Crystals",
         color: "#1c5c49",
         border: "#48edd4",
+        unlocked: true,
         x: 210,
-        y: 295
+        y: 285
       },
       {
         num: 2,
         title: "LEVEL 2: THE CHASM",
-        badge: "PLAY LEVEL 2 ➔",
-        desc: "Moving Platforms • Thorn Pendulums • Rolling Logs • Boulders",
-        color: "#275069",
-        border: "#67c4ff",
+        badge: unlockedLevel >= 2 ? "PLAY LEVEL 2 ➔" : "🔒 LOCKED (BEAT LEVEL 1)",
+        desc: "Twilight Indigo • Pendulums • Rolling Logs • Twin Boulders",
+        color: unlockedLevel >= 2 ? "#275069" : "#131b22",
+        border: unlockedLevel >= 2 ? "#67c4ff" : "#324350",
+        unlocked: unlockedLevel >= 2,
         x: 480,
-        y: 295
+        y: 285
       },
       {
         num: 3,
         title: "LEVEL 3: GUARDIAN'S LAIR",
-        badge: "PLAY LEVEL 3 ➔",
-        desc: "Anaconda Boss • Lunge & Venom • Echo Stun • Great Sun Portal",
-        color: "#4e2960",
-        border: "#df75ff",
+        badge:
+          unlockedLevel >= 3
+            ? "PLAY LEVEL 3 ➔"
+            : (unlockedLevel < 2 ? "🔒 LOCKED (BEAT LVL 1 & 2)" : "🔒 LOCKED (BEAT LEVEL 2)"),
+        desc: "Blood Moon Sanctum • Anaconda Boss • Venom Barrage • Great Portal",
+        color: unlockedLevel >= 3 ? "#4e2960" : "#1a121c",
+        border: unlockedLevel >= 3 ? "#df75ff" : "#452d43",
+        unlocked: unlockedLevel >= 3,
         x: 750,
-        y: 295
+        y: 285
       }
     ];
 
@@ -130,22 +160,35 @@ class MenuScene extends Phaser.Scene {
       this.createLevelCard(lvl);
     });
 
-    // "PLAY FROM BEGINNING" BUTTON
-    const playAllBtn = this.add
-      .text(width / 2, 420, "▶ START FROM LEVEL 1", {
+    // Alert toast notification container (for locked warnings)
+    this.toastContainer = this.add.container(width / 2, 380).setDepth(200).setAlpha(0);
+    this.toastBg = this.add.rectangle(0, 0, 520, 36, 0x1f0b0c, 0.95).setStrokeStyle(2, 0xff5252);
+    this.toastText = this.add
+      .text(0, 0, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
+        fontSize: "13px",
+        fontStyle: "bold",
+        color: "#ffcdd2"
+      })
+      .setOrigin(0.5);
+    this.toastContainer.add([this.toastBg, this.toastText]);
+
+    // "PLAY FROM LEVEL 1" BUTTON
+    const playAllBtn = this.add
+      .text(width / 2 - 110, 428, "▶ START FROM LEVEL 1", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "16px",
         fontStyle: "bold",
         color: "#051814",
         backgroundColor: "#48edd4",
-        padding: { x: 28, y: 13 }
+        padding: { x: 22, y: 11 }
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
 
     this.tweens.add({
       targets: playAllBtn,
-      scale: 1.05,
+      scale: 1.04,
       duration: 900,
       yoyo: true,
       repeat: -1
@@ -153,6 +196,37 @@ class MenuScene extends Phaser.Scene {
 
     playAllBtn.on("pointerdown", () => {
       this.startLevel(1);
+    });
+
+    // "RESET PROGRESS" BUTTON (Allows re-locking levels 2 & 3 anytime for testing!)
+    const resetBtn = this.add
+      .text(width / 2 + 130, 428, "🔒 RESET LOCKS (TEST MODE)", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#d7b4b8",
+        backgroundColor: "#2c1719",
+        padding: { x: 16, y: 11 }
+      })
+      .setOrigin(0.5)
+      .setStrokeStyle ? null : null; // safety check
+    
+    // Add stroke style to reset button visually
+    const resetRect = this.add
+      .rectangle(width / 2 + 130, 428, 230, 38, 0x2c1719, 0.9)
+      .setStrokeStyle(1.5, 0x884444)
+      .setInteractive({ useHandCursor: true });
+    
+    // Put text on top of rect
+    resetBtn.setDepth(10);
+    resetRect.setDepth(9);
+
+    resetRect.on("pointerdown", () => {
+      this.resetLocks();
+    });
+    resetBtn.setInteractive({ useHandCursor: true });
+    resetBtn.on("pointerdown", () => {
+      this.resetLocks();
     });
 
     // Footer Control Tips
@@ -169,6 +243,19 @@ class MenuScene extends Phaser.Scene {
       )
       .setOrigin(0.5);
 
+    this.add
+      .text(
+        width / 2,
+        510,
+        "Level 2 unlocks after clearing Level 1 • Level 3 unlocks after clearing Level 2",
+        {
+          fontFamily: "Arial, sans-serif",
+          fontSize: "11px",
+          color: "#5fa393"
+        }
+      )
+      .setOrigin(0.5);
+
     // Spacebar start shortcut
     this.input.keyboard.once("keydown-SPACE", () => {
       this.startLevel(1);
@@ -176,66 +263,166 @@ class MenuScene extends Phaser.Scene {
   }
 
   createLevelCard(lvl) {
-    const cardBg = this.add
-      .rectangle(lvl.x, lvl.y, 240, 125, Phaser.Display.Color.HexStringToColor(lvl.color).color, 0.95)
-      .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color)
-      .setInteractive({ useHandCursor: true });
+    const isUnlocked = lvl.unlocked;
 
+    const cardBg = this.add
+      .rectangle(
+        lvl.x,
+        lvl.y,
+        240,
+        130,
+        Phaser.Display.Color.HexStringToColor(lvl.color).color,
+        isUnlocked ? 0.95 : 0.65
+      )
+      .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color)
+      .setInteractive({ useHandCursor: isUnlocked });
+
+    const titleColor = isUnlocked ? "#ffffff" : "#8a969e";
     const titleText = this.add
-      .text(lvl.x, lvl.y - 32, lvl.title, {
+      .text(lvl.x, lvl.y - 34, lvl.title, {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         fontStyle: "bold",
-        color: "#ffffff"
+        color: titleColor
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: isUnlocked });
 
+    const descColor = isUnlocked ? "#d4ece5" : "#60727c";
     const descText = this.add
-      .text(lvl.x, lvl.y - 2, lvl.desc, {
+      .text(lvl.x, lvl.y - 4, lvl.desc, {
         fontFamily: "Arial, sans-serif",
         fontSize: "11px",
-        color: "#d4ece5",
+        color: descColor,
         align: "center",
         wordWrap: { width: 220 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: isUnlocked });
 
+    const badgeColor = isUnlocked ? lvl.border : "#e57373";
+    const badgeBg = isUnlocked ? "#061814" : "#241014";
     const playBadge = this.add
       .text(lvl.x, lvl.y + 36, lvl.badge, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "12px",
+        fontSize: isUnlocked ? "12px" : "11px",
         fontStyle: "bold",
-        color: lvl.border,
-        backgroundColor: "#061814",
-        padding: { x: 12, y: 5 }
+        color: badgeColor,
+        backgroundColor: badgeBg,
+        padding: { x: 10, y: 5 }
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: isUnlocked });
+
+    // Optional lock overlay icon for locked cards
+    let lockIcon = null;
+    if (!isUnlocked) {
+      lockIcon = this.add
+        .text(lvl.x + 95, lvl.y - 45, "🔒", {
+          fontSize: "18px"
+        })
+        .setOrigin(0.5);
+    }
+
+    const cardElements = [cardBg, titleText, descText, playBadge];
+    if (lockIcon) cardElements.push(lockIcon);
 
     const onCardClick = () => {
-      this.startLevel(lvl.num);
+      if (!isUnlocked) {
+        this.showLockedAlert(lvl);
+      } else {
+        this.startLevel(lvl.num);
+      }
     };
 
-    [cardBg, titleText, descText, playBadge].forEach(elem => {
+    cardElements.forEach(elem => {
       elem.on("pointerdown", onCardClick);
-      elem.on("pointerover", () => {
-        cardBg.setScale(1.04);
-        titleText.setScale(1.04);
-        descText.setScale(1.04);
-        playBadge.setScale(1.04);
+
+      if (isUnlocked) {
+        elem.on("pointerover", () => {
+          cardBg.setScale(1.04);
+          titleText.setScale(1.04);
+          descText.setScale(1.04);
+          playBadge.setScale(1.04);
+        });
+        elem.on("pointerout", () => {
+          cardBg.setScale(1);
+          titleText.setScale(1);
+          descText.setScale(1);
+          playBadge.setScale(1);
+        });
+      } else {
+        elem.on("pointerover", () => {
+          cardBg.setStrokeStyle(3, 0xff5252);
+        });
+        elem.on("pointerout", () => {
+          cardBg.setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color);
+        });
+      }
+    });
+
+    lvl.elements = cardElements;
+    lvl.cardBg = cardBg;
+  }
+
+  showLockedAlert(lvl) {
+    if (window.SoundManager && window.SoundManager.playLock) {
+      window.SoundManager.playLock();
+    }
+
+    const reqMsg =
+      lvl.num === 2
+        ? "🔒 LEVEL 2 IS LOCKED! Complete Level 1 to enter The Chasm."
+        : "🔒 LEVEL 3 IS LOCKED! Complete Level 1 & Level 2 to enter Guardian's Lair.";
+
+    this.toastText.setText(reqMsg);
+    this.toastContainer.setAlpha(1);
+
+    // Shake the clicked card
+    if (lvl.cardBg) {
+      this.tweens.add({
+        targets: lvl.cardBg,
+        x: lvl.x + 6,
+        duration: 50,
+        yoyo: true,
+        repeat: 3
       });
-      elem.on("pointerout", () => {
-        cardBg.setScale(1);
-        titleText.setScale(1);
-        descText.setScale(1);
-        playBadge.setScale(1);
+    }
+
+    // Auto-fade toast
+    if (this.toastTimer) this.toastTimer.remove();
+    this.toastTimer = this.time.delayedCall(2200, () => {
+      this.tweens.add({
+        targets: this.toastContainer,
+        alpha: 0,
+        duration: 350
       });
     });
   }
 
+  resetLocks() {
+    this.setUnlockedLevel(1);
+    if (window.SoundManager && window.SoundManager.playLock) {
+      window.SoundManager.playLock();
+    }
+
+    this.toastText.setText("🔄 PROGRESS RESET: Levels 2 & 3 are now LOCKED!");
+    this.toastBg.setFillStyle(0x10251d, 0.95).setStrokeStyle(2, 0x48edd4);
+    this.toastText.setColor("#b8f3e5");
+    this.toastContainer.setAlpha(1);
+
+    this.time.delayedCall(700, () => {
+      this.scene.restart();
+    });
+  }
+
   startLevel(levelNumber) {
+    const unlockedLevel = this.getUnlockedLevel();
+    if (levelNumber > unlockedLevel) {
+      this.showLockedAlert({ num: levelNumber });
+      return;
+    }
+
     window.SoundManager.ensureContext();
     window.SoundManager.playLevelStart();
     this.cameras.main.fade(250, 6, 20, 19);

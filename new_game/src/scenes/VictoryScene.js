@@ -11,6 +11,15 @@ class VictoryScene extends Phaser.Scene {
     this.completedLevel = data.level || 1;
     this.crystals = data.crystals || 3;
     this.maxCrystals = data.maxCrystals || 3;
+
+    // Persist level unlocking progression
+    try {
+      const current = parseInt(localStorage.getItem("echobound_unlocked_level") || "1", 10);
+      const nextUnlocked = Math.min(3, this.completedLevel + 1);
+      if (nextUnlocked > current) {
+        localStorage.setItem("echobound_unlocked_level", String(nextUnlocked));
+      }
+    } catch (e) {}
   }
 
   create() {
@@ -57,7 +66,7 @@ class VictoryScene extends Phaser.Scene {
     const headerText = isFinalLevel ? "SANCTUM CLEARED!" : `LEVEL ${this.completedLevel} COMPLETE!`;
 
     this.add
-      .text(width / 2, 130, headerText, {
+      .text(width / 2, 115, headerText, {
         fontFamily: "Georgia, serif",
         fontSize: "46px",
         fontStyle: "bold",
@@ -72,37 +81,64 @@ class VictoryScene extends Phaser.Scene {
       : "LUMINA GATEWAY AWAKENED • PATHWAY UNLOCKED";
 
     this.add
-      .text(width / 2, 190, subText, {
+      .text(width / 2, 170, subText, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "14px",
+        fontSize: "13px",
         fontStyle: "bold",
         color: "#9af3de",
         letterSpacing: 2
       })
       .setOrigin(0.5);
 
+    // Progression Unlock Notification
+    const unlockMsg =
+      this.completedLevel === 1
+        ? "🔓 NEW UNLOCK: LEVEL 2 - THE ANCIENT CHASM IS NOW ACCESSIBLE!"
+        : this.completedLevel === 2
+        ? "🔓 NEW UNLOCK: LEVEL 3 - GUARDIAN'S LAIR (BOSS) IS NOW ACCESSIBLE!"
+        : "🏆 ALL 3 REALMS CONQUERED • YOU HAVE MASTERED ECHOBOUND!";
+
+    const unlockBanner = this.add
+      .text(width / 2, 212, unlockMsg, {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#ffe082",
+        backgroundColor: "#163428",
+        padding: { x: 18, y: 6 }
+      })
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: unlockBanner,
+      scale: 1.05,
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+
     // Stars
     this.add
-      .text(width / 2, 240, "★  ★  ★", {
+      .text(width / 2, 260, "★  ★  ★", {
         fontFamily: "Georgia, serif",
-        fontSize: "36px",
+        fontSize: "32px",
         color: "#ffdf6d"
       })
       .setOrigin(0.5);
 
     // Stats Box
     const statsBox = this.add
-      .rectangle(width / 2, 310, 480, 70, 0x092b23, 0.85)
+      .rectangle(width / 2, 325, 520, 65, 0x092b23, 0.85)
       .setStrokeStyle(2, 0x48edd4);
 
     this.add
       .text(
         width / 2,
-        310,
-        `💎 CRYSTALS COLLECTED: ${this.crystals} / ${this.maxCrystals}   |   ECHO PULSE: MASTERED\nSTATUS: ALL OBSTACLES CONQUERED`,
+        325,
+        `💎 CRYSTALS COLLECTED: ${this.crystals} / ${this.maxCrystals}   |   ECHO PULSE: MASTERED\nSTATUS: ALL OBSTACLES CONQUERED   |   PROGRESSION SAVED`,
         {
           fontFamily: "Arial, sans-serif",
-          fontSize: "14px",
+          fontSize: "13px",
           color: "#ffffff",
           align: "center",
           lineSpacing: 5

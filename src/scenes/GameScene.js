@@ -7,24 +7,25 @@ export default class GameScene extends Phaser.Scene {
     super("GameScene");
   }
 
-  // ==========================================
-  // SCENE INITIALIZATION & DATA RETRIEVAL
-  // ==========================================
-  init(data) {
-    if (data && data.checkpointX) {
-      this.savedCheckpointX = data.checkpointX;
-      this.savedCheckpointActivated = !!data.checkpointActivated;
-      this.savedCrystals = data.crystalsCollected || 0;
-    } else {
-      this.savedCheckpointX = 100;
-      this.savedCheckpointActivated = false;
-      this.savedCrystals = 0;
+  getUnlockedLevel() {
+    try {
+      const val = parseInt(localStorage.getItem("echobound_unlocked_level"), 10);
+      if (isNaN(val) || val < 1) return 1;
+      return Math.min(val, 3);
+    } catch (e) {
+      return 1;
     }
   }
 
-  // ==========================================
-  // PRELOAD ASSETS
-  // ==========================================
+  init(data) {
+    const requested = (data && data.level) || 1;
+    const unlocked = this.getUnlockedLevel();
+    this.currentLevel = requested > unlocked ? unlocked : requested;
+    this.checkpointX = (data && data.checkpointX) || 100;
+    this.checkpointActivated = !!(data && data.checkpointActivated);
+    this.savedCrystals = (data && data.crystalsCollected) || 0;
+  }
+
   preload() {
     this.load.image("jungleBackground", "/assets/backgrounds/jungle-world.png");
     this.load.image("jungleTile", "/assets/backgrounds/jungle-tile.png");
@@ -35,68 +36,98 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // CREATE GAME WORLD
-  // ==========================================
   create() {
-    this.worldWidth = 4200;
+    // Distinct Level Visual Themes & Palettes
+    const levelConfigs = {
+      1: {
+        name: "THE WHISPERING CANOPY",
+        width: 2800,
+        portalX: 2650,
+        hasBoss: false,
+        skyColor: 0x0a2b22,
+        bgTint: 0x98ffcd,
+        groundSoil: 0x3e2c22,
+        groundGrass: 0x6da438,
+        groundMoss: 0x9ecf4a,
+        sporeColor: 0xfff3a8,
+        ambientFog: 0xd4f5e8,
+        vineColor: 0x2e4f2b,
+        leafLight: 0x367f44,
+        leafDark: 0x185633
+      },
+      2: {
+        name: "THE ANCIENT CHASM",
+        width: 3600,
+        portalX: 3450,
+        hasBoss: false,
+        skyColor: 0x100d29,
+        bgTint: 0x7b6be8,
+        groundSoil: 0x201c33,
+        groundGrass: 0x4d5b85,
+        groundMoss: 0x7688c2,
+        sporeColor: 0xb388ff,
+        ambientFog: 0xc8b8ff,
+        vineColor: 0x28234a,
+        leafLight: 0x463f73,
+        leafDark: 0x211c40
+      },
+      3: {
+        name: "THE GUARDIAN'S SANCTUM",
+        width: 4000,
+        portalX: 3850,
+        hasBoss: true,
+        skyColor: 0x2b080a,
+        bgTint: 0xff5555,
+        groundSoil: 0x240e0c,
+        groundGrass: 0x872618,
+        groundMoss: 0xc9492e,
+        sporeColor: 0xff7043,
+        ambientFog: 0xffb4a2,
+        vineColor: 0x4a1815,
+        leafLight: 0x78281f,
+        leafDark: 0x3d120d
+      }
+    };
+
+    this.cfg = levelConfigs[this.currentLevel] || levelConfigs[1];
+    this.levelName = this.cfg.name;
+    this.worldWidth = this.cfg.width;
     this.worldHeight = 540;
+    this.portalX = this.cfg.portalX;
+    this.hasBoss = this.cfg.hasBoss;
 
     this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
 
-    // Gameplay State
     this.health = 3;
     this.maxHealth = 3;
     this.crystalsCollected = this.savedCrystals;
     this.totalCrystals = 3;
-    this.checkpointX = this.savedCheckpointX;
-    this.checkpointActivated = this.savedCheckpointActivated;
     this.damageCooldown = false;
     this.levelComplete = false;
-    this.gameStarted = this.savedCheckpointActivated; // If restarting from checkpoint, skip title screen
     this.echoActive = false;
-    this.echoCooldown = false;
-    this.echoDuration = 3200; // 3.2s echo duration
+    this.echoDuration = 3200;
     this.stepTimer = 0;
+    this.swingingHazards = [];
+    this.anaconda = null;
 
-    // Build World Layers
     this.createBackground();
     this.createDecorations();
     this.createGround();
     this.createHero();
-    this.createSpikeTraps();
-    this.createMovingJungleObstacles();
-    this.createEchoPlatforms();
-    this.createCrystals();
-    this.createCheckpoint();
+    this.buildLevelContent();
     this.createExitPortal();
 
-    // Spawn Anaconda Guardian
-    this.anaconda = new AnacondaGuardian(this, 3300, 310);
-
-    // Setup HUD and Controls
     this.createHUD();
     this.setupInput();
     this.createMobileControls();
 
-    if (!this.gameStarted) {
-      this.createStartScreen();
-    }
-
-    // Initial hint message
-    const welcomeMsg = this.checkpointActivated
-      ? "RESPAWNED AT CHECKPOINT! CONTINUE FORWARD"
-      : "WELCOME TO ECHOBOUND! FIND 3 ENERGY CRYSTALS";
-    this.showMessage(welcomeMsg, 3200);
+    this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 2800);
   }
 
-  // ==========================================
-  // 1. PARALLAX JUNGLE BACKGROUND
-  // ==========================================
   createBackground() {
     this.add
-      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x091b1a)
+      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, this.cfg.skyColor)
       .setDepth(-30);
 
     const panoramaWidth = 1500;
@@ -107,96 +138,88 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setDisplaySize(panoramaWidth, panoramaHeight)
         .setScrollFactor(0.2)
-        .setDepth(-20);
+        .setDepth(-20)
+        .setTint(this.cfg.bgTint);
 
       if (Math.floor(x / (panoramaWidth - 6)) % 2 === 1) {
         panorama.setFlipX(true);
       }
     }
 
-    for (let i = 0; i < 40; i++) {
-      const mist = this.add.circle(
-        Phaser.Math.Between(0, this.worldWidth),
-        Phaser.Math.Between(80, 440),
-        Phaser.Math.Between(4, 12),
-        0xd4f5e8,
-        0.13
-      );
-      mist.setDepth(-4);
+    if (this.currentLevel === 1) {
+      const sunbeams = this.add.graphics().setDepth(-10).setScrollFactor(0.1);
+      sunbeams.fillStyle(0xfff7c2, 0.05);
+      sunbeams.fillTriangle(200, -50, 450, 540, 60, 540);
+      sunbeams.fillTriangle(800, -50, 1100, 540, 650, 540);
+      sunbeams.fillTriangle(1500, -50, 1850, 540, 1350, 540);
+    } else if (this.currentLevel === 2) {
+      const ruins = this.add.graphics().setDepth(-12).setScrollFactor(0.3);
+      ruins.fillStyle(0x191638, 0.85);
+      for (let rx = 150; rx < this.worldWidth; rx += 480) {
+        ruins.fillRect(rx, 80, 70, 420);
+        ruins.fillRect(rx - 15, 70, 100, 20);
+      }
+    } else if (this.currentLevel === 3) {
+      const moon = this.add.circle(800, 140, 95, 0xff3b30, 0.45).setScrollFactor(0.05).setDepth(-25);
+      const moonCore = this.add.circle(800, 140, 70, 0xff7b68, 0.75).setScrollFactor(0.05).setDepth(-24);
+      this.tweens.add({ targets: [moon, moonCore], alpha: 0.3, duration: 2500, yoyo: true, repeat: -1 });
+    }
 
+    for (let i = 0; i < 40; i++) {
+      const spore = this.add.circle(
+        Phaser.Math.Between(0, this.worldWidth),
+        Phaser.Math.Between(60, 450),
+        Phaser.Math.Between(2, 5),
+        this.cfg.sporeColor,
+        0.8
+      );
+      spore.setDepth(6);
+      const floatY = this.currentLevel === 3 ? -Phaser.Math.Between(30, 80) : Phaser.Math.Between(-25, 25);
       this.tweens.add({
-        targets: mist,
-        x: mist.x + Phaser.Math.Between(40, 110),
-        alpha: 0.02,
-        duration: Phaser.Math.Between(3200, 7000),
+        targets: spore,
+        y: spore.y + floatY,
+        x: spore.x + Phaser.Math.Between(-40, 40),
+        alpha: 0.15,
+        scale: 1.5,
+        duration: Phaser.Math.Between(1800, 3500),
         yoyo: true,
         repeat: -1
       });
     }
 
     this.add
-      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, 0x143521, 0.85)
+      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, this.cfg.vineColor, 0.85)
       .setDepth(-2);
   }
 
-  // ==========================================
-  // 2. JUNGLE DECORATIONS & FIREFLIES
-  // ==========================================
   createDecorations() {
-    const vinePositions = [280, 680, 1150, 1620, 2180, 2700, 3050, 3650, 3950];
-
-    vinePositions.forEach((x) => {
+    const spacing = 420;
+    for (let x = 180; x < this.worldWidth; x += spacing) {
       const vines = this.add.graphics();
-      vines.lineStyle(6, 0x2e4f2b, 0.95);
+      vines.lineStyle(6, this.cfg.vineColor, 0.95);
       vines.beginPath();
       vines.moveTo(x, 0);
-      vines.lineTo(x + 28, 75);
+      vines.lineTo(x + 28, 80);
       vines.lineTo(x + 12, 165);
       vines.strokePath();
       vines.setDepth(-1);
 
       const leaves = this.add.graphics();
-      for (let i = 0; i < 6; i++) {
-        leaves.fillStyle(i % 2 === 0 ? 0x185633 : 0x367f44, 0.95);
+      for (let i = 0; i < 5; i++) {
+        leaves.fillStyle(i % 2 === 0 ? this.cfg.leafDark : this.cfg.leafLight, 0.95);
         leaves.fillEllipse(x + i * 14 - 24, 385 + (i % 2) * 16, 75, 24);
       }
       leaves.setDepth(3);
-    });
-
-    this.fireflies = [];
-    for (let i = 0; i < 35; i++) {
-      const fly = this.add.circle(
-        Phaser.Math.Between(80, this.worldWidth - 80),
-        Phaser.Math.Between(90, 440),
-        Phaser.Math.Between(2, 4),
-        0xebff82,
-        0.85
-      );
-      fly.setDepth(6);
-
-      this.tweens.add({
-        targets: fly,
-        y: fly.y - Phaser.Math.Between(15, 30),
-        alpha: 0.2,
-        scale: 1.6,
-        duration: Phaser.Math.Between(1200, 2600),
-        yoyo: true,
-        repeat: -1
-      });
-      this.fireflies.push(fly);
     }
   }
 
-  // ==========================================
-  // 3. GROUND PLATFORMS & MOSS
-  // ==========================================
   createGround() {
     this.ground = this.add.rectangle(
       this.worldWidth / 2,
       512,
       this.worldWidth,
       56,
-      0x3e2c22
+      this.cfg.groundSoil
     );
     this.physics.add.existing(this.ground, true);
 
@@ -205,35 +228,22 @@ export default class GameScene extends Phaser.Scene {
       482,
       this.worldWidth,
       14,
-      0x6b9338
+      this.cfg.groundGrass
     );
     grass.setDepth(2);
 
     const mossEdge = this.add.graphics();
     for (let x = 0; x < this.worldWidth; x += 38) {
-      mossEdge.fillStyle(0x9fc84e, 1);
+      mossEdge.fillStyle(this.cfg.groundMoss, 1);
       mossEdge.fillRoundedRect(x, 474 + (x % 3) * 2, 28, 8, 3);
-      mossEdge.fillStyle(0x4d752c, 1);
+      mossEdge.fillStyle(this.cfg.groundSoil, 1);
       mossEdge.fillCircle(x + 7, 487, 3);
-      mossEdge.fillCircle(x + 22, 485, 2.5);
     }
     mossEdge.setDepth(3);
-
-    const groundDetails = this.add.graphics();
-    for (let x = 0; x < this.worldWidth; x += 55) {
-      groundDetails.lineStyle(2, 0x644630, 0.65);
-      groundDetails.lineBetween(x, 492, x + 18, 516);
-      groundDetails.lineBetween(x + 25, 496, x + 40, 526);
-    }
-    groundDetails.setDepth(1);
   }
 
-  // ==========================================
-  // 4. HERO CHARACTER & ANIMATIONS
-  // ==========================================
   createHero() {
-    const spawnX = this.checkpointX;
-    this.player = this.physics.add.sprite(spawnX, 470, "jungleBoy");
+    this.player = this.physics.add.sprite(this.checkpointX, 470, "jungleBoy");
     this.player.setOrigin(0.5, 1);
     this.player.setCollideWorldBounds(true);
     this.player.setMaxVelocity(280, 850);
@@ -287,204 +297,92 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // 5. SPIKE HAZARDS
-  // ==========================================
-  createSpikeTraps() {
-    const spikePositions = [700, 1300, 2200, 2850, 3650];
+  buildLevelContent() {
+    this.echoPlatforms = [];
+    this.crystals = [];
+    this.swingingHazards = [];
 
-    spikePositions.forEach((x) => {
-      const graphics = this.add.graphics();
-      graphics.fillStyle(0xd5ddd2, 1);
+    if (this.currentLevel === 1) {
+      this.createSpikes([700, 1600]);
+      this.createEchoPlatformGroup([
+        { x: 950, y: 395, width: 120 },
+        { x: 1100, y: 330, width: 120 },
+        { x: 2050, y: 395, width: 120 },
+        { x: 2200, y: 330, width: 120 }
+      ]);
+      this.createCrystalsGroup([
+        { x: 520, y: 430, id: 0 },
+        { x: 1450, y: 430, id: 1 },
+        { x: 2250, y: 280, id: 2 }
+      ]);
+      this.createCheckpointTotem(1750);
+    } else if (this.currentLevel === 2) {
+      this.createSpikes([550, 1150, 1750, 2450]);
+      this.createMovingPlatform(700, 395, 1000);
+      this.createSwingingPendulum(1300, 75, 240, -36, 36, 1700);
+      this.createSwingingPendulum(1550, 75, 240, 36, -36, 1700);
+      this.createRollingLog(1850, 450, 1750, 2050, 2200);
+      this.createRollingLog(2200, 450, 2100, 2400, 1900);
+      this.createCheckpointTotem(2400);
+      this.createFallingBoulder(2650, 190, 700);
+      this.createFallingBoulder(2900, 190, 1300);
+      this.createEchoPlatformGroup([
+        { x: 2980, y: 395, width: 110 },
+        { x: 3120, y: 330, width: 110 },
+        { x: 3260, y: 265, width: 110 }
+      ]);
+      this.createCrystalsGroup([
+        { x: 850, y: 340, id: 0 },
+        { x: 2000, y: 430, id: 1 },
+        { x: 3260, y: 215, id: 2 }
+      ]);
+    } else if (this.currentLevel === 3) {
+      this.createSpikes([450, 1100, 1600, 2200]);
+      this.createMovingPlatform(650, 395, 950);
+      this.createSwingingPendulum(1250, 75, 245, -40, 40, 1600);
+      this.createRollingLog(1450, 450, 1350, 1600, 1800);
+      this.createFallingBoulder(1850, 190, 800);
+      this.createFallingBoulder(2100, 190, 1400);
+      this.createCheckpointTotem(2300);
+      this.createSpikes([2950, 3100, 3250]);
+      this.createEchoPlatformGroup([
+        { x: 2880, y: 390, width: 105 },
+        { x: 3040, y: 320, width: 110 },
+        { x: 3200, y: 250, width: 115 },
+        { x: 3360, y: 190, width: 110 }
+      ]);
+      this.createCrystalsGroup([
+        { x: 800, y: 340, id: 0 },
+        { x: 1950, y: 430, id: 1 },
+        { x: 3200, y: 190, id: 2 }
+      ]);
+      this.anaconda = new AnacondaGuardian(this, 3100, 310);
+    }
+  }
 
+  createSpikes(positions) {
+    positions.forEach((x) => {
+      const g = this.add.graphics();
+      g.fillStyle(this.currentLevel === 3 ? 0xe64a19 : 0xd5ddd2, 1);
       for (let i = 0; i < 5; i++) {
-        graphics.fillTriangle(
+        g.fillTriangle(
           x - 48 + i * 20, 480,
           x - 38 + i * 20, 444,
           x - 28 + i * 20, 480
         );
       }
-      graphics.lineStyle(2, 0x3d4b3b, 0.9);
-      for (let i = 0; i < 5; i++) {
-        graphics.strokeTriangle(
-          x - 48 + i * 20, 480,
-          x - 38 + i * 20, 444,
-          x - 28 + i * 20, 480
-        );
-      }
-      graphics.setDepth(4);
+      g.setDepth(4);
 
       const hitbox = this.add.rectangle(x, 468, 100, 24, 0xff0000, 0);
       this.physics.add.existing(hitbox, true);
-
-      this.physics.add.overlap(this.player, hitbox, () => {
-        this.damagePlayer(1);
-      });
+      this.physics.add.overlap(this.player, hitbox, () => this.damagePlayer(1));
     });
   }
 
-  // ==========================================
-  // 6. MOVING JUNGLE OBSTACLES
-  // ==========================================
-  createMovingJungleObstacles() {
-    // 1) Swinging Thorn Vine Pendulum
-    const pivotX = 1080;
-    const pivotY = 75;
-    const length = 245;
-
-    const rope = this.add.container(pivotX, pivotY).setDepth(8);
-    const ropeLine = this.add.graphics();
-    ropeLine.lineStyle(9, 0x483222, 1);
-    ropeLine.lineBetween(0, 0, 0, length - 10);
-    ropeLine.lineStyle(3, 0x88a346, 0.9);
-    ropeLine.lineBetween(-2, 10, -2, length - 20);
-    ropeLine.fillStyle(0x327542, 1);
-    ropeLine.fillEllipse(-15, 68, 26, 12);
-    ropeLine.fillEllipse(14, 118, 28, 13);
-    ropeLine.fillEllipse(-12, 168, 25, 11);
-    rope.add(ropeLine);
-
-    const thornBall = this.add.graphics();
-    thornBall.fillStyle(0x654329, 1);
-    thornBall.fillCircle(0, length, 28);
-    thornBall.lineStyle(4, 0x2a1e17, 1);
-    thornBall.strokeCircle(0, length, 28);
-    thornBall.fillStyle(0xa4c64b, 1);
-    thornBall.fillTriangle(-20, length - 8, -44, length - 22, -18, length + 2);
-    thornBall.fillTriangle(20, length - 8, 44, length - 22, 18, length + 2);
-    thornBall.fillTriangle(-8, length - 24, -16, length - 46, 0, length - 26);
-    thornBall.fillTriangle(8, length - 24, 16, length - 46, 0, length - 26);
-    rope.add(thornBall);
-
-    const tip = this.add.circle(pivotX, pivotY + length, 30, 0xffffff, 0);
-    this.physics.add.existing(tip);
-    tip.body.setAllowGravity(false);
-    tip.body.setCircle(26, 4, 4);
-    tip.body.setImmovable(true);
-    this.physics.add.overlap(this.player, tip, () => this.damagePlayer(1));
-
-    this.swingingHazard = { rope, tip, pivotX, pivotY, length };
-    this.tweens.add({
-      targets: rope,
-      angle: { from: -38, to: 38 },
-      duration: 1800,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut"
-    });
-
-    // 2) Moving Vine Platform across chasm
-    this.movingPlatform = this.add.rectangle(1480, 395, 135, 22, 0x7a5232);
-    this.physics.add.existing(this.movingPlatform, true);
-    this.physics.add.collider(this.player, this.movingPlatform);
-
-    const platformMoss = this.add.graphics();
-    platformMoss.fillStyle(0x7fb33f, 1);
-    platformMoss.fillRoundedRect(-67, -11, 134, 7, 3);
-    const platformContainer = this.add.container(1480, 395).setDepth(3);
-    platformContainer.add(platformMoss);
-
-    this.tweens.add({
-      targets: [this.movingPlatform, platformContainer],
-      x: 1720,
-      duration: 2600,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-      onUpdate: () => {
-        this.movingPlatform.body.updateFromGameObject();
-      }
-    });
-
-    // 3) Rolling Log Hazard
-    const logX = 1860;
-    const logY = 450;
-    const log = this.add.container(logX, logY).setDepth(9);
-    const logArt = this.add.graphics();
-    logArt.fillStyle(0x6e4325, 1);
-    logArt.fillRoundedRect(-70, -22, 140, 44, 16);
-    logArt.lineStyle(4, 0x362316, 1);
-    logArt.strokeRoundedRect(-70, -22, 140, 44, 16);
-    logArt.lineStyle(3, 0x9f6a38, 1);
-    logArt.lineBetween(-38, -14, -16, 14);
-    logArt.lineBetween(10, -14, 30, 14);
-    log.add(logArt);
-
-    const logSensor = this.add.rectangle(logX, logY, 125, 40, 0xffffff, 0);
-    this.physics.add.existing(logSensor);
-    logSensor.body.setAllowGravity(false);
-    logSensor.body.setImmovable(true);
-    this.physics.add.overlap(this.player, logSensor, () => this.damagePlayer(1));
-
-    this.tweens.add({
-      targets: [log, logSensor],
-      x: { from: 1760, to: 2020 },
-      duration: 2500,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-      onUpdate: () => logSensor.body.updateFromGameObject()
-    });
-    this.tweens.add({ targets: log, angle: 360, duration: 1100, repeat: -1 });
-
-    // 4) Falling Ancient Boulder
-    const rockX = 2780;
-    const rock = this.add.container(rockX, 190).setDepth(8);
-    const rockArt = this.add.graphics();
-    rockArt.fillStyle(0x5a6860, 1);
-    const rockPts = [
-      { x: -36, y: -16 },
-      { x: -16, y: -38 },
-      { x: 18, y: -32 },
-      { x: 40, y: -4 },
-      { x: 26, y: 30 },
-      { x: -18, y: 32 },
-      { x: -40, y: 6 }
-    ];
-    rockArt.fillPoints(rockPts, true);
-    rockArt.lineStyle(4, 0x2b3832, 1);
-    rockArt.strokePoints(rockPts, true);
-    rock.add(rockArt);
-
-    const rockSensor = this.add.rectangle(rockX, 190, 65, 65, 0xffffff, 0);
-    this.physics.add.existing(rockSensor);
-    rockSensor.body.setAllowGravity(false);
-    rockSensor.body.setImmovable(true);
-    this.physics.add.overlap(this.player, rockSensor, () => this.damagePlayer(1));
-
-    this.tweens.add({
-      targets: [rock, rockSensor],
-      y: 425,
-      duration: 800,
-      delay: 800,
-      yoyo: true,
-      repeat: -1,
-      repeatDelay: 1600,
-      ease: "Quad.easeIn",
-      onUpdate: () => rockSensor.body.updateFromGameObject()
-    });
-  }
-
-  // ==========================================
-  // 7. ECHO PULSE PLATFORMS
-  // ==========================================
-  createEchoPlatforms() {
-    this.echoPlatforms = [];
-
-    const echoPositions = [
-      { x: 860, y: 395, width: 120 },
-      { x: 980, y: 325, width: 120 },
-      { x: 2360, y: 395, width: 130 },
-      { x: 2510, y: 325, width: 120 },
-      // Anaconda overhead bypass & secret crystal path:
-      { x: 3120, y: 390, width: 110 },
-      { x: 3260, y: 320, width: 120 },
-      { x: 3410, y: 250, width: 120 }
-    ];
-
-    echoPositions.forEach((p) => {
-      // Solid physics bar at world coordinates
-      const bar = this.add.rectangle(p.x, p.y, p.width, 18, 0x47e8da);
+  createEchoPlatformGroup(positions) {
+    positions.forEach((p) => {
+      const barColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x47e8da);
+      const bar = this.add.rectangle(p.x, p.y, p.width, 18, barColor);
       bar.setStrokeStyle(2, 0xffffff);
       bar.setDepth(7);
       bar.setAlpha(0);
@@ -507,35 +405,21 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // 8. ENERGY CRYSTALS
-  // ==========================================
-  createCrystals() {
-    this.crystals = [];
-
-    const crystalPositions = [
-      { x: 550, y: 430, id: 0 },
-      { x: 2060, y: 430, id: 1 },
-      { x: 3410, y: 205, id: 2 }
-    ];
-
-    crystalPositions.forEach((p) => {
-      // If already collected prior to checkpoint reload, skip
-      if (this.savedCrystals > p.id) {
-        return;
-      }
+  createCrystalsGroup(positions) {
+    positions.forEach((p) => {
+      if (this.savedCrystals > p.id) return;
 
       const container = this.add.container(p.x, p.y).setDepth(8);
+      const glowColor = this.currentLevel === 3 ? 0xff5722 : (this.currentLevel === 2 ? 0x448aff : 0x42f5d4);
+      const gemColor = this.currentLevel === 3 ? 0xff8a65 : (this.currentLevel === 2 ? 0x82b1ff : 0x67ffef);
 
-      const glow = this.add.circle(0, 0, 26, 0x42f5d4, 0.28);
-
+      const glow = this.add.circle(0, 0, 26, glowColor, 0.35);
       const crystal = this.add.polygon(
         0, 0,
         [0, -18, 13, -6, 10, 13, 0, 20, -10, 13, -13, -6],
-        0x67ffef
+        gemColor
       );
       crystal.setStrokeStyle(2, 0xffffff);
-
       const core = this.add.polygon(
         0, 0,
         [0, -11, 7, -4, 6, 8, 0, 12, -6, 8, -7, -4],
@@ -544,8 +428,7 @@ export default class GameScene extends Phaser.Scene {
 
       container.add([glow, crystal, core]);
 
-      // Standalone sensor at world coordinates
-      const sensor = this.add.circle(p.x, p.y, 25, 0xffffff, 0);
+      const sensor = this.add.circle(p.x, p.y, 26, 0xffffff, 0);
       this.physics.add.existing(sensor, true);
 
       this.physics.add.overlap(this.player, sensor, () => {
@@ -558,7 +441,6 @@ export default class GameScene extends Phaser.Scene {
         duration: 2200,
         repeat: -1
       });
-
       this.tweens.add({
         targets: container,
         y: p.y - 10,
@@ -567,7 +449,6 @@ export default class GameScene extends Phaser.Scene {
         repeat: -1,
         ease: "Sine.easeInOut"
       });
-
       this.tweens.add({
         targets: glow,
         scale: 1.5,
@@ -581,47 +462,159 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // 9. CHECKPOINT TOTEM
-  // ==========================================
-  createCheckpoint() {
-    this.checkpoint = this.add.container(2450, 420).setDepth(5);
-
+  createCheckpointTotem(x) {
+    this.checkpoint = this.add.container(x, 420).setDepth(5);
     const pole = this.add.rectangle(0, 0, 12, 125, 0x8a6e4d);
     pole.setStrokeStyle(2, 0x48351f);
 
     const flagColor = this.checkpointActivated ? 0xffd54f : 0x5a6369;
-    this.checkpointFlag = this.add.triangle(
-      26, -42,
-      0, 0,
-      0, 36,
-      48, 18,
-      flagColor
-    );
+    this.checkpointFlag = this.add.triangle(26, -42, 0, 0, 0, 36, 48, 18, flagColor);
 
     const lightColor = this.checkpointActivated ? 0xffea00 : 0xffffff;
     const lightAlpha = this.checkpointActivated ? 0.9 : 0.2;
     this.checkpointLight = this.add.circle(0, -62, 14, lightColor, lightAlpha);
 
     this.checkpoint.add([pole, this.checkpointFlag, this.checkpointLight]);
+    this.checkpointTargetX = x;
   }
 
-  // ==========================================
-  // 10. MYSTICAL EXIT PORTAL
-  // ==========================================
+  createMovingPlatform(x, y, targetX) {
+    const platColor = this.currentLevel === 3 ? 0x5c2b20 : (this.currentLevel === 2 ? 0x3d4157 : 0x7a5232);
+    this.movingPlatform = this.add.rectangle(x, y, 135, 22, platColor);
+    this.physics.add.existing(this.movingPlatform, true);
+    this.physics.add.collider(this.player, this.movingPlatform);
+
+    const moss = this.add.graphics();
+    moss.fillStyle(this.cfg.groundMoss, 1);
+    moss.fillRoundedRect(-67, -11, 134, 7, 3);
+    const container = this.add.container(x, y).setDepth(3);
+    container.add(moss);
+
+    this.tweens.add({
+      targets: [this.movingPlatform, container],
+      x: targetX,
+      duration: 2500,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+      onUpdate: () => this.movingPlatform.body.updateFromGameObject()
+    });
+  }
+
+  createSwingingPendulum(pivotX, pivotY, length, fromAngle = -38, toAngle = 38, duration = 1800) {
+    const rope = this.add.container(pivotX, pivotY).setDepth(8);
+    const ropeLine = this.add.graphics();
+    ropeLine.lineStyle(9, 0x483222, 1);
+    ropeLine.lineBetween(0, 0, 0, length - 10);
+    rope.add(ropeLine);
+
+    const thornBall = this.add.graphics();
+    thornBall.fillStyle(this.currentLevel === 3 ? 0x5c1b18 : 0x654329, 1);
+    thornBall.fillCircle(0, length, 28);
+    thornBall.fillStyle(this.cfg.groundMoss, 1);
+    thornBall.fillTriangle(-20, length - 8, -44, length - 22, -18, length + 2);
+    thornBall.fillTriangle(20, length - 8, 44, length - 22, 18, length + 2);
+    rope.add(thornBall);
+
+    const tip = this.add.circle(pivotX, pivotY + length, 30, 0xffffff, 0);
+    this.physics.add.existing(tip);
+    tip.body.setAllowGravity(false);
+    tip.body.setImmovable(true);
+    this.physics.add.overlap(this.player, tip, () => this.damagePlayer(1));
+
+    const hazard = { rope, tip, pivotX, pivotY, length };
+    this.swingingHazards.push(hazard);
+
+    this.tweens.add({
+      targets: rope,
+      angle: { from: fromAngle, to: toAngle },
+      duration: duration,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+  }
+
+  createRollingLog(x, y, minX, maxX, duration = 2500) {
+    const log = this.add.container(x, y).setDepth(9);
+    const logArt = this.add.graphics();
+    logArt.fillStyle(this.currentLevel === 3 ? 0x4a1815 : 0x6e4325, 1);
+    logArt.fillRoundedRect(-70, -22, 140, 44, 16);
+    logArt.lineStyle(4, 0x24100e, 1);
+    logArt.strokeRoundedRect(-70, -22, 140, 44, 16);
+    log.add(logArt);
+
+    const sensor = this.add.rectangle(x, y, 125, 40, 0xffffff, 0);
+    this.physics.add.existing(sensor);
+    sensor.body.setAllowGravity(false);
+    sensor.body.setImmovable(true);
+    this.physics.add.overlap(this.player, sensor, () => this.damagePlayer(1));
+
+    this.tweens.add({
+      targets: [log, sensor],
+      x: { from: minX, to: maxX },
+      duration: duration,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+      onUpdate: () => sensor.body.updateFromGameObject()
+    });
+    this.tweens.add({ targets: log, angle: 360, duration: 1000, repeat: -1 });
+  }
+
+  createFallingBoulder(x, y, delay = 800) {
+    const rock = this.add.container(x, y).setDepth(8);
+    const rockArt = this.add.graphics();
+    rockArt.fillStyle(this.currentLevel === 3 ? 0x421b18 : 0x5a6860, 1);
+
+    const pts = [
+      { x: -36, y: -16 },
+      { x: -16, y: -38 },
+      { x: 18, y: -32 },
+      { x: 40, y: -4 },
+      { x: 26, y: 30 },
+      { x: -18, y: 32 },
+      { x: -40, y: 6 }
+    ];
+    rockArt.fillPoints(pts, true);
+    rockArt.lineStyle(4, 0x24100e, 1);
+    rockArt.strokePoints(pts, true);
+    rock.add(rockArt);
+
+    const sensor = this.add.rectangle(x, y, 65, 65, 0xffffff, 0);
+    this.physics.add.existing(sensor);
+    sensor.body.setAllowGravity(false);
+    sensor.body.setImmovable(true);
+    this.physics.add.overlap(this.player, sensor, () => this.damagePlayer(1));
+
+    this.tweens.add({
+      targets: [rock, sensor],
+      y: 425,
+      duration: 800,
+      delay: delay,
+      yoyo: true,
+      repeat: -1,
+      repeatDelay: 1500,
+      ease: "Quad.easeIn",
+      onUpdate: () => sensor.body.updateFromGameObject()
+    });
+  }
+
   createExitPortal() {
-    this.portal = this.add.container(4050, 420).setDepth(7);
+    this.portal = this.add.container(this.portalX, 420).setDepth(7);
 
-    this.portalOuter = this.add.ellipse(0, 0, 105, 120, 0x14473e, 0.85);
-    this.portalOuter.setStrokeStyle(4, 0x3ae7c6);
+    const outerColor = this.currentLevel === 3 ? 0x5c1815 : (this.currentLevel === 2 ? 0x221a4f : 0x14473e);
+    const ringColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x7c4dff : 0x3ae7c6);
 
-    this.portalInner = this.add.ellipse(0, 0, 70, 92, 0x228b78, 0.6);
-    this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xaefff3, 0.7);
+    this.portalOuter = this.add.ellipse(0, 0, 105, 120, outerColor, 0.85);
+    this.portalOuter.setStrokeStyle(4, ringColor);
 
-    this.portalRunes = this.add.text(0, 0, "✦   ✧   ✦   ✧", {
-      fontSize: "14px",
-      color: "#67ffef"
-    }).setOrigin(0.5);
+    this.portalInner = this.add.ellipse(0, 0, 70, 92, outerColor, 0.6);
+    this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xffffff, 0.7);
+
+    this.portalRunes = this.add
+      .text(0, 0, "✦   ✧   ✦   ✧", { fontSize: "14px", color: "#ffffff" })
+      .setOrigin(0.5);
 
     this.portal.add([
       this.portalOuter,
@@ -646,30 +639,21 @@ export default class GameScene extends Phaser.Scene {
       repeat: -1
     });
 
-    this.portalOpen = this.crystalsCollected >= this.totalCrystals;
-
-    // Standalone world-space portal trigger
-    this.portalTrigger = this.add.rectangle(4050, 420, 110, 130, 0xffffff, 0);
+    this.portalTrigger = this.add.rectangle(this.portalX, 420, 110, 130, 0xffffff, 0);
     this.physics.add.existing(this.portalTrigger, true);
-
-    this.physics.add.overlap(this.player, this.portalTrigger, () => {
-      this.enterPortal();
-    });
+    this.physics.add.overlap(this.player, this.portalTrigger, () => this.enterPortal());
   }
 
-  // ==========================================
-  // 11. HUD & INTERFACE
-  // ==========================================
   createHUD() {
     this.hudBar = this.add
-      .rectangle(480, 24, 960, 48, 0x071513, 0.75)
+      .rectangle(480, 24, 960, 48, 0x071513, 0.85)
       .setScrollFactor(0)
       .setDepth(100);
 
     this.healthText = this.add
-      .text(25, 24, "HEALTH: ♥ ♥ ♥", {
+      .text(20, 24, "HEALTH: ♥ ♥ ♥", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "19px",
+        fontSize: "17px",
         color: "#ff5252",
         fontStyle: "bold"
       })
@@ -678,9 +662,9 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(101);
 
     this.crystalText = this.add
-      .text(220, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
+      .text(175, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
+        fontSize: "15px",
         color: "#5cffe8",
         fontStyle: "bold"
       })
@@ -688,32 +672,71 @@ export default class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
+    // QUICK LEVEL PROGRESSION BUTTONS (Locked levels require completing previous ones)
+    const warpX = 330;
+    const unlockedLevel = this.getUnlockedLevel();
+    [1, 2, 3].forEach((lvl, i) => {
+      const isCur = lvl === this.currentLevel;
+      const isUnlocked = lvl <= unlockedLevel;
+      const label = isUnlocked ? `L${lvl}` : `🔒L${lvl}`;
+      const btn = this.add
+        .text(warpX + i * 54, 24, label, {
+          fontFamily: "Arial, sans-serif",
+          fontSize: isUnlocked ? "12px" : "11px",
+          fontStyle: "bold",
+          color: isCur ? "#051814" : (isUnlocked ? "#c5ede2" : "#80928d"),
+          backgroundColor: isCur ? "#48edd4" : (isUnlocked ? "#143f34" : "#1a2220"),
+          padding: { x: isUnlocked ? 7 : 5, y: 4 }
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(101)
+        .setInteractive({ useHandCursor: isUnlocked });
+
+      btn.on("pointerdown", () => {
+        if (!isUnlocked) {
+          audioManager.playHurt();
+          this.showMessage(`🔒 LEVEL ${lvl} LOCKED! Complete Level ${lvl - 1} first.`, 2200);
+          this.tweens.add({
+            targets: btn,
+            x: btn.x + 4,
+            duration: 50,
+            yoyo: true,
+            repeat: 3
+          });
+          return;
+        }
+        audioManager.playJump();
+        this.scene.restart({ level: lvl });
+      });
+    });
+
     this.progressBarBg = this.add
-      .rectangle(480, 24, 180, 10, 0x193831)
+      .rectangle(570, 24, 130, 10, 0x193831)
       .setScrollFactor(0)
       .setDepth(101);
     this.progressBarFill = this.add
-      .rectangle(390, 24, 0, 10, 0x48edd4)
+      .rectangle(505, 24, 0, 10, 0x48edd4)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(101);
     this.progressMarker = this.add
-      .text(390, 24, "🏃", { fontSize: "14px" })
+      .text(505, 24, "🏃", { fontSize: "12px" })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(102);
 
     this.echoGaugeBg = this.add
-      .rectangle(680, 24, 90, 12, 0x15312b)
+      .rectangle(705, 24, 75, 12, 0x15312b)
       .setScrollFactor(0)
       .setDepth(101);
     this.echoGaugeFill = this.add
-      .rectangle(635, 24, 90, 12, 0x49f5df)
+      .rectangle(667, 24, 75, 12, 0x49f5df)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(101);
     this.echoLabel = this.add
-      .text(680, 24, "ECHO READY [E]", {
+      .text(705, 24, "ECHO [E]", {
         fontFamily: "Arial, sans-serif",
         fontSize: "10px",
         color: "#08261e",
@@ -724,39 +747,29 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(102);
 
     this.muteBtn = this.add
-      .text(820, 24, "🔊 SFX ON", {
+      .text(805, 24, "🔊 SFX", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
+        fontSize: "12px",
         color: "#e2fffa",
         backgroundColor: "#164539",
-        padding: { x: 8, y: 5 },
+        padding: { x: 7, y: 4 },
         fontStyle: "bold"
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(101)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     this.muteBtn.on("pointerdown", () => {
       const isMuted = audioManager.toggleMute();
-      this.muteBtn.setText(isMuted ? "🔇 SFX OFF" : "🔊 SFX ON");
+      this.muteBtn.setText(isMuted ? "🔇 SFX" : "🔊 SFX");
       this.muteBtn.setStyle({ backgroundColor: isMuted ? "#451616" : "#164539" });
     });
-
-    this.controlsHint = this.add
-      .text(945, 24, "A/D: MOVE  SPACE: JUMP", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "11px",
-        color: "#9ad4c8"
-      })
-      .setOrigin(1, 0.5)
-      .setScrollFactor(0)
-      .setDepth(101);
 
     this.portalMessage = this.add
       .text(480, 95, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "18px",
+        fontSize: "17px",
         fontStyle: "bold",
         color: "#ffffff",
         backgroundColor: "#123b30",
@@ -770,9 +783,6 @@ export default class GameScene extends Phaser.Scene {
       .setDepth(150);
   }
 
-  // ==========================================
-  // 12. INPUT HANDLING
-  // ==========================================
   setupInput() {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
@@ -782,9 +792,6 @@ export default class GameScene extends Phaser.Scene {
     this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
   }
 
-  // ==========================================
-  // 13. MOBILE ON-SCREEN CONTROLS
-  // ==========================================
   createMobileControls() {
     this.mobileLeft = false;
     this.mobileRight = false;
@@ -815,7 +822,7 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(200)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     btn.setStyle({ stroke: border, strokeThickness: 2 });
 
@@ -838,122 +845,13 @@ export default class GameScene extends Phaser.Scene {
     return btn;
   }
 
-  // ==========================================
-  // 14. START OVERLAY (Audio & Game Ignition)
-  // ==========================================
-  createStartScreen() {
-    this.startOverlay = this.add
-      .rectangle(480, 270, 960, 540, 0x040f0d, 0.88)
-      .setScrollFactor(0)
-      .setDepth(300);
-
-    this.titleText = this.add
-      .text(480, 190, "ECHOBOUND", {
-        fontFamily: "Georgia, serif",
-        fontSize: "52px",
-        fontStyle: "bold",
-        color: "#ffffff",
-        stroke: "#1c543f",
-        strokeThickness: 8
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(301);
-
-    this.subTitleText = this.add
-      .text(480, 250, "THE LOST LIGHT", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "16px",
-        color: "#7ef5d8",
-        letterSpacing: 8,
-        fontStyle: "bold"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(301);
-
-    this.descText = this.add
-      .text(
-        480,
-        310,
-        "Explore the ancient forgotten canopy. Harness the Echo Pulse to reveal hidden\nethereal pathways and stun ancient predators. Collect all 3 Crystals to unlock the exit.",
-        {
-          fontFamily: "Arial, sans-serif",
-          fontSize: "15px",
-          color: "#d2ece4",
-          align: "center",
-          lineSpacing: 5
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(301);
-
-    this.startButton = this.add
-      .text(480, 390, "PRESS SPACE OR CLICK TO BEGIN", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "18px",
-        fontStyle: "bold",
-        color: "#051813",
-        backgroundColor: "#48edd4",
-        padding: { x: 24, y: 14 }
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(301)
-      .setInteractive();
-
-    this.tweens.add({
-      targets: this.startButton,
-      scale: 1.06,
-      duration: 800,
-      yoyo: true,
-      repeat: -1
-    });
-
-    const startGame = () => {
-      if (this.gameStarted) return;
-      this.gameStarted = true;
-      audioManager.ensureContext();
-      audioManager.playEchoPulse();
-
-      this.tweens.add({
-        targets: [
-          this.startOverlay,
-          this.titleText,
-          this.subTitleText,
-          this.descText,
-          this.startButton
-        ],
-        alpha: 0,
-        duration: 500,
-        onComplete: () => {
-          this.startOverlay.destroy();
-          this.titleText.destroy();
-          this.subTitleText.destroy();
-          this.descText.destroy();
-          this.startButton.destroy();
-        }
-      });
-    };
-
-    this.startButton.on("pointerdown", startGame);
-    this.input.keyboard.once("keydown-SPACE", startGame);
-    this.input.keyboard.once("keydown-ENTER", startGame);
-  }
-
-  // ==========================================
-  // 15. MAIN GAME LOOP
-  // ==========================================
   update(time, delta) {
     if (!this.player || !this.player.active || this.levelComplete) return;
 
-    // Update Anaconda Guardian AI
     if (this.anaconda) {
       this.anaconda.update();
     }
 
-    // Input checks
     const left = this.cursors.left.isDown || this.keyA.isDown || this.mobileLeft;
     const right = this.cursors.right.isDown || this.keyD.isDown || this.mobileRight;
     const jumpPressed =
@@ -963,7 +861,6 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
       this.mobileJump;
 
-    // Movement
     if (left && !right) {
       this.player.body.setVelocityX(-260);
       this.player.setFlipX(true);
@@ -976,7 +873,6 @@ export default class GameScene extends Phaser.Scene {
 
     const grounded = this.player.body.blocked.down || this.player.body.touching.down;
 
-    // Jump execution
     if (jumpPressed && grounded) {
       this.player.body.setVelocityY(-470);
       audioManager.playJump();
@@ -984,7 +880,6 @@ export default class GameScene extends Phaser.Scene {
     }
     this.mobileJump = false;
 
-    // Running footsteps
     if (grounded && (left || right)) {
       this.stepTimer += delta;
       if (this.stepTimer > 280) {
@@ -993,7 +888,6 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Animation state machine
     if (!grounded) {
       this.player.play("hero-jump", true);
     } else if (left || right) {
@@ -1002,40 +896,38 @@ export default class GameScene extends Phaser.Scene {
       this.player.play("hero-idle", true);
     }
 
-    // Echo Pulse trigger
     if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
       this.activateEcho();
     }
 
-    // Swinging pendulum hitbox sync
-    if (this.swingingHazard) {
-      const rot = this.swingingHazard.rope.rotation;
-      const tipX = this.swingingHazard.pivotX + Math.sin(rot) * this.swingingHazard.length;
-      const tipY = this.swingingHazard.pivotY + Math.cos(rot) * this.swingingHazard.length;
-      this.swingingHazard.tip.setPosition(tipX, tipY);
-      this.swingingHazard.tip.body.updateFromGameObject();
+    if (this.swingingHazards && this.swingingHazards.length > 0) {
+      this.swingingHazards.forEach((h) => {
+        const rot = h.rope.rotation;
+        const tipX = h.pivotX + Math.sin(rot) * h.length;
+        const tipY = h.pivotY + Math.cos(rot) * h.length;
+        h.tip.setPosition(tipX, tipY);
+        h.tip.body.updateFromGameObject();
+      });
     }
 
-    // Checkpoint Trigger
-    if (!this.checkpointActivated && this.player.x >= 2450) {
+    if (
+      this.checkpointTargetX &&
+      !this.checkpointActivated &&
+      this.player.x >= this.checkpointTargetX
+    ) {
       this.activateCheckpoint();
     }
 
-    // Update mini progress bar
-    const progress = Phaser.Math.Clamp(this.player.x / 4050, 0, 1);
-    this.progressBarFill.width = 180 * progress;
-    this.progressMarker.x = 390 + 180 * progress;
+    const progress = Phaser.Math.Clamp(this.player.x / this.portalX, 0, 1);
+    this.progressBarFill.width = 130 * progress;
+    this.progressMarker.x = 505 + 130 * progress;
 
-    // Fall boundary respawn
     if (this.player.y > 560) {
       this.respawnPlayer();
       this.damagePlayer(1);
     }
   }
 
-  // ==========================================
-  // 16. ECHO PULSE ABILITY
-  // ==========================================
   activateEcho() {
     if (this.echoActive || this.levelComplete) return;
 
@@ -1044,15 +936,13 @@ export default class GameScene extends Phaser.Scene {
 
     this.createEchoWave(this.player.x, this.player.y);
 
-    // Stun Anaconda if within proximity
     if (
       this.anaconda &&
-      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 650
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 680
     ) {
       this.anaconda.stun();
     }
 
-    // Reveal ethereal platforms
     this.echoPlatforms.forEach((p) => {
       p.bar.body.enable = true;
       this.tweens.add({
@@ -1063,8 +953,8 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.showMessage("ECHO PULSE RESONATES! PATHWAYS REVEALED", 1600);
+    this.echoLabel.setText("ACTIVE");
 
-    this.echoLabel.setText("ECHO ACTIVE");
     this.tweens.add({
       targets: this.echoGaugeFill,
       width: 0,
@@ -1085,25 +975,26 @@ export default class GameScene extends Phaser.Scene {
       });
 
       this.echoActive = false;
-      this.echoLabel.setText("ECHO RECHARGING");
+      this.echoLabel.setText("RECHARGE");
 
       this.tweens.add({
         targets: this.echoGaugeFill,
-        width: 90,
-        duration: 1500,
+        width: 75,
+        duration: 1400,
         ease: "Linear",
         onComplete: () => {
-          this.echoLabel.setText("ECHO READY [E]");
+          this.echoLabel.setText("ECHO [E]");
         }
       });
     });
   }
 
   createEchoWave(x, y) {
+    const waveColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x48edd4);
     for (let r = 0; r < 3; r++) {
       this.time.delayedCall(r * 90, () => {
-        const ring = this.add.circle(x, y - 40, 20, 0x48edd4, 0);
-        ring.setStrokeStyle(3, 0x5affea, 0.9);
+        const ring = this.add.circle(x, y - 40, 20, waveColor, 0);
+        ring.setStrokeStyle(3, waveColor, 0.9);
         ring.setDepth(20);
 
         this.tweens.add({
@@ -1126,7 +1017,7 @@ export default class GameScene extends Phaser.Scene {
         x + Phaser.Math.Between(-15, 15),
         y - 4,
         Phaser.Math.Between(3, 6),
-        0x90b56b,
+        this.cfg.groundMoss,
         0.7
       );
       dust.setDepth(12);
@@ -1142,25 +1033,23 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // 17. CRYSTAL COLLECTION
-  // ==========================================
   collectCrystal(container, sensor, index) {
     if (!sensor.active) return;
 
     sensor.destroy();
     audioManager.playCrystal();
 
+    const burstColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x5affea);
+
     for (let i = 0; i < 16; i++) {
       const spark = this.add.circle(
         container.x,
         container.y,
         Phaser.Math.Between(2, 5),
-        0x5affea,
+        burstColor,
         1
       );
       spark.setDepth(25);
-
       const angle = (i / 16) * Math.PI * 2;
       const dist = Phaser.Math.Between(35, 75);
 
@@ -1183,9 +1072,7 @@ export default class GameScene extends Phaser.Scene {
     this.showMessage(`CRYSTAL ${this.crystalsCollected}/3 RESTORED!`, 1500);
 
     if (this.crystalsCollected >= this.totalCrystals) {
-      this.portalOpen = true;
-      this.showMessage("ALL CRYSTALS RESTORED! THE PORTAL IS AWAKENED!", 3000);
-
+      this.showMessage("ALL CRYSTALS RESTORED! THE PORTAL IS OPEN!", 3000);
       this.tweens.add({
         targets: this.portal,
         scale: 1.35,
@@ -1193,7 +1080,6 @@ export default class GameScene extends Phaser.Scene {
         yoyo: true,
         repeat: 5
       });
-
       this.tweens.add({
         targets: this.portalInner,
         alpha: 1,
@@ -1202,12 +1088,9 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // 18. CHECKPOINT SYSTEM
-  // ==========================================
   activateCheckpoint() {
     this.checkpointActivated = true;
-    this.checkpointX = 2450;
+    this.checkpointX = this.checkpointTargetX;
     audioManager.playCheckpoint();
 
     this.checkpointFlag.setFillStyle(0xffd54f);
@@ -1224,9 +1107,6 @@ export default class GameScene extends Phaser.Scene {
     this.showMessage("CHECKPOINT SAVED!", 2000);
   }
 
-  // ==========================================
-  // 19. DAMAGE, HEALTH & RESPAWN
-  // ==========================================
   damagePlayer(amount) {
     if (this.damageCooldown || this.levelComplete) return;
 
@@ -1255,6 +1135,7 @@ export default class GameScene extends Phaser.Scene {
 
       this.time.delayedCall(1600, () => {
         this.scene.restart({
+          level: this.currentLevel,
           checkpointX: this.checkpointX,
           checkpointActivated: this.checkpointActivated,
           crystalsCollected: this.checkpointActivated ? Math.max(this.crystalsCollected, 2) : 0
@@ -1268,9 +1149,6 @@ export default class GameScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
   }
 
-  // ==========================================
-  // 20. PORTAL & LEVEL COMPLETION
-  // ==========================================
   enterPortal() {
     if (this.levelComplete) return;
 
@@ -1284,107 +1162,66 @@ export default class GameScene extends Phaser.Scene {
     this.physics.pause();
     this.player.setVelocity(0, 0);
 
-    const overlay = this.add
-      .rectangle(480, 270, 960, 540, 0x051a14, 0.94)
-      .setScrollFactor(0)
-      .setDepth(500)
-      .setAlpha(0);
+    // Save level progression unlock
+    const curUnlocked = this.getUnlockedLevel();
+    if (this.currentLevel === 1 && curUnlocked < 2) {
+      try {
+        localStorage.setItem("echobound_unlocked_level", "2");
+      } catch (e) {}
+    } else if (this.currentLevel === 2 && curUnlocked < 3) {
+      try {
+        localStorage.setItem("echobound_unlocked_level", "3");
+      } catch (e) {}
+    }
 
-    const glow = this.add
-      .circle(480, 180, 140, 0x48edd4, 0.15)
-      .setScrollFactor(0)
-      .setDepth(501)
-      .setAlpha(0);
+    const isLast = this.currentLevel >= 3;
+    const nextLvl = this.currentLevel + 1;
 
-    const title = this.add
-      .text(480, 150, "ECHOBOUND", {
-        fontFamily: "Georgia, serif",
-        fontSize: "36px",
-        fontStyle: "bold",
-        color: "#ffffff"
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(502)
-      .setAlpha(0);
+    // Victory Screen overlay
+    const overlay = this.add.rectangle(480, 270, 960, 540, 0x051a14, 0.94).setScrollFactor(0).setDepth(500);
+    const glow = this.add.circle(480, 180, 140, 0x48edd4, 0.16).setScrollFactor(0).setDepth(501);
 
-    const triumph = this.add
-      .text(480, 215, "LEVEL COMPLETE!", {
-        fontFamily: "Georgia, serif",
-        fontSize: "56px",
-        fontStyle: "bold",
-        color: "#ffdf6d",
-        stroke: "#1f4a38",
-        strokeThickness: 8
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(502)
-      .setScale(0.5)
-      .setAlpha(0);
+    const title = this.add.text(480, 140, isLast ? "SANCTUM CLEARED!" : `LEVEL ${this.currentLevel} COMPLETE!`, {
+      fontFamily: "Georgia, serif",
+      fontSize: "46px",
+      fontStyle: "bold",
+      color: "#ffdf6d",
+      stroke: "#194a36",
+      strokeThickness: 8
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
 
-    const sub = this.add
-      .text(480, 285, "THE LOST LIGHT OF THE CANOPY HAS BEEN RESTORED", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
-        fontStyle: "bold",
-        color: "#99f3de",
-        letterSpacing: 2
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(502)
-      .setAlpha(0);
+    const sub = this.add.text(480, 205, isLast ? "THE LOST LIGHT OF VERIDIA IS FULLY RESTORED" : "PATHWAY TO NEXT REALM UNLOCKED", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "15px",
+      fontStyle: "bold",
+      color: "#99f3de",
+      letterSpacing: 2
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
 
-    const stats = this.add
-      .text(
-        480,
-        340,
-        "✦ CRYSTALS RESTORED: 3 / 3  ✦  ANACONDA GUARDIAN: STUNNED  ✦  RATING: ★ ★ ★",
-        {
-          fontFamily: "Arial, sans-serif",
-          fontSize: "15px",
-          color: "#ffffff"
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(502)
-      .setAlpha(0);
+    const stars = this.add.text(480, 260, "★  ★  ★", {
+      fontFamily: "Georgia, serif",
+      fontSize: "36px",
+      color: "#ffdf6d"
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
 
-    const restartBtn = this.add
-      .text(480, 420, "PRESS ENTER OR CLICK TO PLAY AGAIN", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
-        fontStyle: "bold",
-        color: "#051813",
-        backgroundColor: "#ffdf6d",
-        padding: { x: 22, y: 13 }
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(502)
-      .setAlpha(0)
-      .setInteractive();
+    const nextBtn = this.add.text(480, 360, isLast ? "🏆 REPLAY FULL ADVENTURE (LEVEL 1)" : `NEXT: LEVEL ${nextLvl} ➔`, {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "17px",
+      fontStyle: "bold",
+      color: "#051814",
+      backgroundColor: isLast ? "#ffdf6d" : "#48edd4",
+      padding: { x: 26, y: 13 }
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(502).setInteractive({ useHandCursor: true });
 
-    this.tweens.add({ targets: overlay, alpha: 1, duration: 700 });
-    this.tweens.add({ targets: glow, alpha: 0.8, scale: 1.4, duration: 1200, yoyo: true, repeat: -1 });
-    this.tweens.add({ targets: [title, sub, stats, restartBtn], alpha: 1, duration: 800, delay: 200 });
-    this.tweens.add({ targets: triumph, alpha: 1, scale: 1, duration: 850, ease: "Back.easeOut" });
-
-    restartBtn.on("pointerdown", () => this.scene.restart());
-    this.input.keyboard.once("keydown-ENTER", () => this.scene.restart());
+    nextBtn.on("pointerdown", () => {
+      this.scene.restart({ level: isLast ? 1 : nextLvl });
+    });
   }
 
-  // ==========================================
-  // 21. HELPER: TEMPORARY MESSAGE
-  // ==========================================
   showMessage(message, duration = 1600) {
     if (!this.portalMessage) return;
-
     this.portalMessage.setText(message);
     if (this.messageTimer) this.messageTimer.remove();
-
     this.messageTimer = this.time.delayedCall(duration, () => {
       if (!this.levelComplete) {
         this.portalMessage.setText("");

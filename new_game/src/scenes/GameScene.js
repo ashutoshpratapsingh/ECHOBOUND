@@ -1,7 +1,9 @@
 /**
- * ECHOBOUND - Core Gameplay Scene (Levels 1, 2, and 3)
- * Full Arcade Physics, Echo Pulse mechanics, dynamic obstacles,
- * procedural Web Audio synthesis, and responsive web + mobile touch controls.
+ * ECHOBOUND - Multi-Level Core Gameplay Scene
+ * Distinct themes, backgrounds, palettes, and progressive difficulty across all 3 levels:
+ * - Level 1: The Whispering Canopy (Sunlit Emerald Rainforest)
+ * - Level 2: The Ancient Chasm (Moody Twilight Indigo Ruins, Heavy Obstacles)
+ * - Level 3: The Guardian's Sanctum (Crimson Blood Moon Sanctum, Aggressive Anaconda Boss)
  */
 
 class GameScene extends Phaser.Scene {
@@ -9,8 +11,26 @@ class GameScene extends Phaser.Scene {
     super("GameScene");
   }
 
+  getUnlockedLevel() {
+    try {
+      const val = parseInt(localStorage.getItem("echobound_unlocked_level"), 10);
+      if (isNaN(val) || val < 1) return 1;
+      return Math.min(val, 3);
+    } catch (e) {
+      return 1;
+    }
+  }
+
   init(data) {
-    this.currentLevel = data.level || 1;
+    const requestedLevel = data.level || 1;
+    const unlockedLevel = this.getUnlockedLevel();
+
+    // Enforce sequential level locking: cannot skip to locked levels
+    if (requestedLevel > unlockedLevel) {
+      this.currentLevel = unlockedLevel;
+    } else {
+      this.currentLevel = requestedLevel;
+    }
     this.checkpointX = data.checkpointX || 100;
     this.checkpointActivated = !!data.checkpointActivated;
     this.savedCrystals = data.crystalsCollected || 0;
@@ -31,19 +51,72 @@ class GameScene extends Phaser.Scene {
   create() {
     this.ensureFallbackTextures();
 
-    // Level-specific world configurations
+    // ==========================================
+    // DISTINCT LEVEL CONFIGURATIONS & THEMES
+    // ==========================================
     const levelConfigs = {
-      1: { name: "THE WHISPERING CANOPY", width: 2800, portalX: 2650, hasBoss: false },
-      2: { name: "THE ANCIENT CHASM", width: 3400, portalX: 3250, hasBoss: false },
-      3: { name: "THE GUARDIAN'S SANCTUM", width: 3800, portalX: 3650, hasBoss: true }
+      1: {
+        name: "THE WHISPERING CANOPY",
+        subtitle: "Sunlit Rainforest • Level 1",
+        width: 2800,
+        portalX: 2650,
+        hasBoss: false,
+        // Visual theme: Sunlit vibrant emerald
+        skyColor: 0x0a2b22,
+        bgTint: 0x98ffcd,
+        groundSoil: 0x3e2c22,
+        groundGrass: 0x6da438,
+        groundMoss: 0x9ecf4a,
+        sporeColor: 0xfff3a8,
+        ambientFog: 0xd4f5e8,
+        vineColor: 0x2e4f2b,
+        leafLight: 0x367f44,
+        leafDark: 0x185633
+      },
+      2: {
+        name: "THE ANCIENT CHASM",
+        subtitle: "Twilight Indigo Ruins • Level 2",
+        width: 3600,
+        portalX: 3450,
+        hasBoss: false,
+        // Visual theme: Moody twilight indigo / violet ruins
+        skyColor: 0x100d29,
+        bgTint: 0x7b6be8,
+        groundSoil: 0x201c33,
+        groundGrass: 0x4d5b85,
+        groundMoss: 0x7688c2,
+        sporeColor: 0xb388ff,
+        ambientFog: 0xc8b8ff,
+        vineColor: 0x28234a,
+        leafLight: 0x463f73,
+        leafDark: 0x211c40
+      },
+      3: {
+        name: "THE GUARDIAN'S SANCTUM",
+        subtitle: "Blood Moon Sanctum • Level 3 (Boss)",
+        width: 4000,
+        portalX: 3850,
+        hasBoss: true,
+        // Visual theme: Menacing blood-moon crimson & amber
+        skyColor: 0x2b080a,
+        bgTint: 0xff5555,
+        groundSoil: 0x240e0c,
+        groundGrass: 0x872618,
+        groundMoss: 0xc9492e,
+        sporeColor: 0xff7043,
+        ambientFog: 0xffb4a2,
+        vineColor: 0x4a1815,
+        leafLight: 0x78281f,
+        leafDark: 0x3d120d
+      }
     };
 
-    const cfg = levelConfigs[this.currentLevel] || levelConfigs[1];
-    this.levelName = cfg.name;
-    this.worldWidth = cfg.width;
+    this.cfg = levelConfigs[this.currentLevel] || levelConfigs[1];
+    this.levelName = this.cfg.name;
+    this.worldWidth = this.cfg.width;
     this.worldHeight = 540;
-    this.portalX = cfg.portalX;
-    this.hasBoss = cfg.hasBoss;
+    this.portalX = this.cfg.portalX;
+    this.hasBoss = this.cfg.hasBoss;
 
     this.physics.world.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
@@ -58,7 +131,7 @@ class GameScene extends Phaser.Scene {
     this.echoActive = false;
     this.echoDuration = 3200;
     this.stepTimer = 0;
-    this.swingingHazard = null;
+    this.swingingHazards = [];
     this.anaconda = null;
 
     // Build World Elements
@@ -74,8 +147,8 @@ class GameScene extends Phaser.Scene {
     this.setupInput();
     this.createMobileControls();
 
-    // Level start toast
-    this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 2800);
+    // Level announcement toast
+    this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 3000);
   }
 
   ensureFallbackTextures() {
@@ -97,9 +170,13 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ==========================================
+  // 1. THEMED PARALLAX BACKGROUND
+  // ==========================================
   createBackground() {
+    // Unique Sky color per level
     this.add
-      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x071b19)
+      .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, this.cfg.skyColor)
       .setDepth(-30);
 
     const panoramaWidth = 1500;
@@ -112,7 +189,8 @@ class GameScene extends Phaser.Scene {
           .setOrigin(0, 0)
           .setDisplaySize(panoramaWidth, panoramaHeight)
           .setScrollFactor(0.2)
-          .setDepth(-20);
+          .setDepth(-20)
+          .setTint(this.cfg.bgTint);
 
         if (Math.floor(x / (panoramaWidth - 6)) % 2 === 1) {
           panorama.setFlipX(true);
@@ -120,19 +198,80 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    for (let i = 0; i < 35; i++) {
+    // Level-specific atmospheric lighting & particles
+    if (this.currentLevel === 1) {
+      // Golden sunbeams cutting through canopy
+      const sunbeams = this.add.graphics().setDepth(-10).setScrollFactor(0.1);
+      sunbeams.fillStyle(0xfff7c2, 0.05);
+      sunbeams.fillTriangle(200, -50, 450, 540, 60, 540);
+      sunbeams.fillTriangle(800, -50, 1100, 540, 650, 540);
+      sunbeams.fillTriangle(1500, -50, 1850, 540, 1350, 540);
+    } else if (this.currentLevel === 2) {
+      // Ancient stone pillars in background
+      const ruins = this.add.graphics().setDepth(-12).setScrollFactor(0.3);
+      ruins.fillStyle(0x191638, 0.85);
+      for (let rx = 150; rx < this.worldWidth; rx += 480) {
+        ruins.fillRect(rx, 80, 70, 420);
+        ruins.fillRect(rx - 15, 70, 100, 20); // Pillar capital
+      }
+    } else if (this.currentLevel === 3) {
+      // Menacing Blood Moon in background
+      const moon = this.add
+        .circle(800, 140, 95, 0xff3b30, 0.45)
+        .setScrollFactor(0.05)
+        .setDepth(-25);
+      const moonCore = this.add
+        .circle(800, 140, 70, 0xff7b68, 0.75)
+        .setScrollFactor(0.05)
+        .setDepth(-24);
+
+      this.tweens.add({
+        targets: [moon, moonCore],
+        alpha: 0.3,
+        duration: 2500,
+        yoyo: true,
+        repeat: -1
+      });
+    }
+
+    // Themed ambient floating spores / embers / wisps
+    for (let i = 0; i < 40; i++) {
+      const spore = this.add.circle(
+        Phaser.Math.Between(0, this.worldWidth),
+        Phaser.Math.Between(60, 450),
+        Phaser.Math.Between(2, 5),
+        this.cfg.sporeColor,
+        0.8
+      );
+      spore.setDepth(6);
+
+      const floatY = this.currentLevel === 3 ? -Phaser.Math.Between(30, 80) : Phaser.Math.Between(-25, 25);
+      this.tweens.add({
+        targets: spore,
+        y: spore.y + floatY,
+        x: spore.x + Phaser.Math.Between(-40, 40),
+        alpha: 0.15,
+        scale: 1.5,
+        duration: Phaser.Math.Between(1800, 3500),
+        yoyo: true,
+        repeat: -1
+      });
+    }
+
+    // Canopy mist
+    for (let i = 0; i < 30; i++) {
       const mist = this.add.circle(
         Phaser.Math.Between(0, this.worldWidth),
         Phaser.Math.Between(90, 440),
-        Phaser.Math.Between(4, 12),
-        0xd4f5e8,
-        0.12
+        Phaser.Math.Between(5, 14),
+        this.cfg.ambientFog,
+        0.1
       );
       mist.setDepth(-4);
 
       this.tweens.add({
         targets: mist,
-        x: mist.x + Phaser.Math.Between(40, 100),
+        x: mist.x + Phaser.Math.Between(40, 110),
         alpha: 0.02,
         duration: Phaser.Math.Between(3000, 6500),
         yoyo: true,
@@ -140,59 +279,43 @@ class GameScene extends Phaser.Scene {
       });
     }
 
+    // Foreground silhouette trim
     this.add
-      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, 0x143521, 0.85)
+      .rectangle(this.worldWidth / 2, 488, this.worldWidth, 18, this.cfg.vineColor, 0.85)
       .setDepth(-2);
   }
 
   createDecorations() {
-    const spacing = 450;
-    for (let x = 200; x < this.worldWidth; x += spacing) {
+    const spacing = 420;
+    for (let x = 180; x < this.worldWidth; x += spacing) {
       const vines = this.add.graphics();
-      vines.lineStyle(6, 0x2e4f2b, 0.95);
+      vines.lineStyle(6, this.cfg.vineColor, 0.95);
       vines.beginPath();
       vines.moveTo(x, 0);
-      vines.lineTo(x + 28, 75);
-      vines.lineTo(x + 12, 160);
+      vines.lineTo(x + 28, 80);
+      vines.lineTo(x + 12, 165);
       vines.strokePath();
       vines.setDepth(-1);
 
       const leaves = this.add.graphics();
       for (let i = 0; i < 5; i++) {
-        leaves.fillStyle(i % 2 === 0 ? 0x185633 : 0x367f44, 0.95);
+        leaves.fillStyle(i % 2 === 0 ? this.cfg.leafDark : this.cfg.leafLight, 0.95);
         leaves.fillEllipse(x + i * 14 - 24, 385 + (i % 2) * 16, 75, 24);
       }
       leaves.setDepth(3);
     }
-
-    for (let i = 0; i < 30; i++) {
-      const fly = this.add.circle(
-        Phaser.Math.Between(80, this.worldWidth - 80),
-        Phaser.Math.Between(90, 440),
-        Phaser.Math.Between(2, 4),
-        0xebff82,
-        0.85
-      );
-      fly.setDepth(6);
-      this.tweens.add({
-        targets: fly,
-        y: fly.y - Phaser.Math.Between(15, 30),
-        alpha: 0.2,
-        scale: 1.6,
-        duration: Phaser.Math.Between(1200, 2600),
-        yoyo: true,
-        repeat: -1
-      });
-    }
   }
 
+  // ==========================================
+  // 3. THEMED GROUND PLATFORMS
+  // ==========================================
   createGround() {
     this.ground = this.add.rectangle(
       this.worldWidth / 2,
       512,
       this.worldWidth,
       56,
-      0x3e2c22
+      this.cfg.groundSoil
     );
     this.physics.add.existing(this.ground, true);
 
@@ -201,15 +324,15 @@ class GameScene extends Phaser.Scene {
       482,
       this.worldWidth,
       14,
-      0x6b9338
+      this.cfg.groundGrass
     );
     grass.setDepth(2);
 
     const mossEdge = this.add.graphics();
     for (let x = 0; x < this.worldWidth; x += 38) {
-      mossEdge.fillStyle(0x9fc84e, 1);
+      mossEdge.fillStyle(this.cfg.groundMoss, 1);
       mossEdge.fillRoundedRect(x, 474 + (x % 3) * 2, 28, 8, 3);
-      mossEdge.fillStyle(0x4d752c, 1);
+      mossEdge.fillStyle(this.cfg.groundSoil, 1);
       mossEdge.fillCircle(x + 7, 487, 3);
     }
     mossEdge.setDepth(3);
@@ -271,14 +394,17 @@ class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // BUILD LEVEL CONTENT
+  // 4. LEVEL CONTENT BUILDER (PROGRESSIVE DIFFICULTY)
   // ==========================================
   buildLevelContent() {
     this.echoPlatforms = [];
     this.crystals = [];
+    this.swingingHazards = [];
 
     if (this.currentLevel === 1) {
-      // LEVEL 1: THE WHISPERING CANOPY
+      // ------------------------------------------
+      // LEVEL 1: THE WHISPERING CANOPY (INTRO)
+      // ------------------------------------------
       this.createSpikes([700, 1600]);
       this.createEchoPlatformGroup([
         { x: 950, y: 395, width: 120 },
@@ -293,52 +419,91 @@ class GameScene extends Phaser.Scene {
       ]);
       this.createCheckpointTotem(1750);
     } else if (this.currentLevel === 2) {
-      // LEVEL 2: THE ANCIENT CHASM
-      this.createSpikes([600, 1200, 2350]);
-      this.createMovingPlatform(750, 395, 1050);
-      this.createSwingingPendulum(1350, 75, 245);
-      this.createRollingLog(1800, 450, 1700, 2050);
-      this.createFallingBoulder(2550, 190);
-      this.createEchoPlatformGroup([
-        { x: 2750, y: 395, width: 120 },
-        { x: 2900, y: 325, width: 120 }
-      ]);
-      this.createCrystalsGroup([
-        { x: 900, y: 340, id: 0 },
-        { x: 1950, y: 430, id: 1 },
-        { x: 2950, y: 270, id: 2 }
-      ]);
-      this.createCheckpointTotem(2200);
-    } else if (this.currentLevel === 3) {
-      // LEVEL 3: THE GUARDIAN'S SANCTUM (ANACONDA BOSS)
-      this.createSpikes([500, 1250, 2250]);
-      this.createSwingingPendulum(1000, 75, 245);
-      this.createMovingPlatform(1400, 395, 1680);
-      this.createRollingLog(2450, 450, 2350, 2680);
-      this.createFallingBoulder(2750, 190);
-      this.createEchoPlatformGroup([
-        { x: 750, y: 395, width: 120 },
-        // Overhead bypass platforms:
-        { x: 3000, y: 390, width: 110 },
-        { x: 3140, y: 320, width: 120 },
-        { x: 3280, y: 245, width: 120 }
-      ]);
-      this.createCrystalsGroup([
-        { x: 600, y: 430, id: 0 },
-        { x: 1800, y: 430, id: 1 },
-        { x: 3280, y: 195, id: 2 } // High canopy above Anaconda!
-      ]);
-      this.createCheckpointTotem(2100);
+      // ------------------------------------------
+      // LEVEL 2: THE ANCIENT CHASM (INCREASED HAZARDS)
+      // ------------------------------------------
+      // Triple spike pits
+      this.createSpikes([550, 1150, 1750, 2450]);
 
-      // Spawn Boss
-      this.anaconda = new window.AnacondaBoss(this, 3150, 310);
+      // 1) First Moving Platform over wide spike gap
+      this.createMovingPlatform(700, 395, 1000);
+
+      // 2) DUAL Anti-Phase Swinging Thorn Pendulums (timing challenge!)
+      this.createSwingingPendulum(1300, 75, 240, -36, 36, 1700);
+      this.createSwingingPendulum(1550, 75, 240, 36, -36, 1700);
+
+      // 3) DOUBLE Rolling Spiked Logs patrolling sequential runways
+      this.createRollingLog(1850, 450, 1750, 2050, 2200);
+      this.createRollingLog(2200, 450, 2100, 2400, 1900);
+
+      // Checkpoint before the heavy second half
+      this.createCheckpointTotem(2400);
+
+      // 4) TWIN Staggered Falling Canopy Boulders
+      this.createFallingBoulder(2650, 190, 700);
+      this.createFallingBoulder(2900, 190, 1300);
+
+      // 5) Multi-Tier Echo Platforms over deep chasm
+      this.createEchoPlatformGroup([
+        { x: 2980, y: 395, width: 110 },
+        { x: 3120, y: 330, width: 110 },
+        { x: 3260, y: 265, width: 110 }
+      ]);
+
+      // 3 Crystals placed at demanding skill spots
+      this.createCrystalsGroup([
+        { x: 850, y: 340, id: 0 },  // High above moving platform
+        { x: 2000, y: 430, id: 1 }, // Between the two rolling logs!
+        { x: 3260, y: 215, id: 2 }  // Top of the high Echo platform chain!
+      ]);
+    } else if (this.currentLevel === 3) {
+      // ------------------------------------------
+      // LEVEL 3: THE GUARDIAN'S SANCTUM (MAX DIFFICULTY & BOSS)
+      // ------------------------------------------
+      // Lethal ground hazards leading up to the sanctum
+      this.createSpikes([450, 1100, 1600, 2200]);
+
+      // Moving platform over spikes
+      this.createMovingPlatform(650, 395, 950);
+
+      // Swinging pendulum + rolling log combo
+      this.createSwingingPendulum(1250, 75, 245, -40, 40, 1600);
+      this.createRollingLog(1450, 450, 1350, 1600, 1800);
+
+      // Staggered falling boulders
+      this.createFallingBoulder(1850, 190, 800);
+      this.createFallingBoulder(2100, 190, 1400);
+
+      // Sacred Checkpoint before entering Boss Arena
+      this.createCheckpointTotem(2300);
+
+      // Spikes protecting the Boss Tree's roots (cannot simply run underneath!)
+      this.createSpikes([2950, 3100, 3250]);
+
+      // Overhead canopy Echo Platforms above the Anaconda
+      this.createEchoPlatformGroup([
+        { x: 2880, y: 390, width: 105 },
+        { x: 3040, y: 320, width: 110 },
+        { x: 3200, y: 250, width: 115 },
+        { x: 3360, y: 190, width: 110 }
+      ]);
+
+      // Crystals
+      this.createCrystalsGroup([
+        { x: 800, y: 340, id: 0 },
+        { x: 1950, y: 430, id: 1 },
+        { x: 3200, y: 190, id: 2 } // At the very apex above the Anaconda!
+      ]);
+
+      // Spawn the Aggressive Anaconda Boss
+      this.anaconda = new window.AnacondaBoss(this, 3100, 310);
     }
   }
 
   createSpikes(positions) {
     positions.forEach((x) => {
       const g = this.add.graphics();
-      g.fillStyle(0xd5ddd2, 1);
+      g.fillStyle(this.currentLevel === 3 ? 0xe64a19 : 0xd5ddd2, 1);
       for (let i = 0; i < 5; i++) {
         g.fillTriangle(
           x - 48 + i * 20, 480,
@@ -356,7 +521,8 @@ class GameScene extends Phaser.Scene {
 
   createEchoPlatformGroup(positions) {
     positions.forEach((p) => {
-      const bar = this.add.rectangle(p.x, p.y, p.width, 18, 0x47e8da);
+      const barColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x47e8da);
+      const bar = this.add.rectangle(p.x, p.y, p.width, 18, barColor);
       bar.setStrokeStyle(2, 0xffffff);
       bar.setDepth(7);
       bar.setAlpha(0);
@@ -384,11 +550,14 @@ class GameScene extends Phaser.Scene {
       if (this.savedCrystals > p.id) return;
 
       const container = this.add.container(p.x, p.y).setDepth(8);
-      const glow = this.add.circle(0, 0, 26, 0x42f5d4, 0.28);
+      const glowColor = this.currentLevel === 3 ? 0xff5722 : (this.currentLevel === 2 ? 0x448aff : 0x42f5d4);
+      const gemColor = this.currentLevel === 3 ? 0xff8a65 : (this.currentLevel === 2 ? 0x82b1ff : 0x67ffef);
+
+      const glow = this.add.circle(0, 0, 26, glowColor, 0.35);
       const crystal = this.add.polygon(
         0, 0,
         [0, -18, 13, -6, 10, 13, 0, 20, -10, 13, -13, -6],
-        0x67ffef
+        gemColor
       );
       crystal.setStrokeStyle(2, 0xffffff);
       const core = this.add.polygon(
@@ -399,7 +568,7 @@ class GameScene extends Phaser.Scene {
 
       container.add([glow, crystal, core]);
 
-      const sensor = this.add.circle(p.x, p.y, 25, 0xffffff, 0);
+      const sensor = this.add.circle(p.x, p.y, 26, 0xffffff, 0);
       this.physics.add.existing(sensor, true);
 
       this.physics.add.overlap(this.player, sensor, () => {
@@ -450,12 +619,13 @@ class GameScene extends Phaser.Scene {
   }
 
   createMovingPlatform(x, y, targetX) {
-    this.movingPlatform = this.add.rectangle(x, y, 135, 22, 0x7a5232);
+    const platColor = this.currentLevel === 3 ? 0x5c2b20 : (this.currentLevel === 2 ? 0x3d4157 : 0x7a5232);
+    this.movingPlatform = this.add.rectangle(x, y, 135, 22, platColor);
     this.physics.add.existing(this.movingPlatform, true);
     this.physics.add.collider(this.player, this.movingPlatform);
 
     const moss = this.add.graphics();
-    moss.fillStyle(0x7fb33f, 1);
+    moss.fillStyle(this.cfg.groundMoss, 1);
     moss.fillRoundedRect(-67, -11, 134, 7, 3);
     const container = this.add.container(x, y).setDepth(3);
     container.add(moss);
@@ -463,7 +633,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: [this.movingPlatform, container],
       x: targetX,
-      duration: 2600,
+      duration: 2500,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
@@ -471,7 +641,7 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  createSwingingPendulum(pivotX, pivotY, length) {
+  createSwingingPendulum(pivotX, pivotY, length, fromAngle = -38, toAngle = 38, duration = 1800) {
     const rope = this.add.container(pivotX, pivotY).setDepth(8);
     const ropeLine = this.add.graphics();
     ropeLine.lineStyle(9, 0x483222, 1);
@@ -479,9 +649,9 @@ class GameScene extends Phaser.Scene {
     rope.add(ropeLine);
 
     const thornBall = this.add.graphics();
-    thornBall.fillStyle(0x654329, 1);
+    thornBall.fillStyle(this.currentLevel === 3 ? 0x5c1b18 : 0x654329, 1);
     thornBall.fillCircle(0, length, 28);
-    thornBall.fillStyle(0xa4c64b, 1);
+    thornBall.fillStyle(this.cfg.groundMoss, 1);
     thornBall.fillTriangle(-20, length - 8, -44, length - 22, -18, length + 2);
     thornBall.fillTriangle(20, length - 8, 44, length - 22, 18, length + 2);
     rope.add(thornBall);
@@ -492,23 +662,25 @@ class GameScene extends Phaser.Scene {
     tip.body.setImmovable(true);
     this.physics.add.overlap(this.player, tip, () => this.damagePlayer(1));
 
-    this.swingingHazard = { rope, tip, pivotX, pivotY, length };
+    const hazard = { rope, tip, pivotX, pivotY, length };
+    this.swingingHazards.push(hazard);
+
     this.tweens.add({
       targets: rope,
-      angle: { from: -38, to: 38 },
-      duration: 1800,
+      angle: { from: fromAngle, to: toAngle },
+      duration: duration,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut"
     });
   }
 
-  createRollingLog(x, y, minX, maxX) {
+  createRollingLog(x, y, minX, maxX, duration = 2500) {
     const log = this.add.container(x, y).setDepth(9);
     const logArt = this.add.graphics();
-    logArt.fillStyle(0x6e4325, 1);
+    logArt.fillStyle(this.currentLevel === 3 ? 0x4a1815 : 0x6e4325, 1);
     logArt.fillRoundedRect(-70, -22, 140, 44, 16);
-    logArt.lineStyle(4, 0x362316, 1);
+    logArt.lineStyle(4, 0x24100e, 1);
     logArt.strokeRoundedRect(-70, -22, 140, 44, 16);
     log.add(logArt);
 
@@ -521,21 +693,20 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: [log, sensor],
       x: { from: minX, to: maxX },
-      duration: 2500,
+      duration: duration,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
       onUpdate: () => sensor.body.updateFromGameObject()
     });
-    this.tweens.add({ targets: log, angle: 360, duration: 1100, repeat: -1 });
+    this.tweens.add({ targets: log, angle: 360, duration: 1000, repeat: -1 });
   }
 
-  createFallingBoulder(x, y) {
+  createFallingBoulder(x, y, delay = 800) {
     const rock = this.add.container(x, y).setDepth(8);
     const rockArt = this.add.graphics();
-    rockArt.fillStyle(0x5a6860, 1);
+    rockArt.fillStyle(this.currentLevel === 3 ? 0x421b18 : 0x5a6860, 1);
 
-    // Clean plain-object points (zero dependency on Geom.Point)
     const pts = [
       { x: -36, y: -16 },
       { x: -16, y: -38 },
@@ -546,7 +717,7 @@ class GameScene extends Phaser.Scene {
       { x: -40, y: 6 }
     ];
     rockArt.fillPoints(pts, true);
-    rockArt.lineStyle(4, 0x2b3832, 1);
+    rockArt.lineStyle(4, 0x24100e, 1);
     rockArt.strokePoints(pts, true);
     rock.add(rockArt);
 
@@ -560,10 +731,10 @@ class GameScene extends Phaser.Scene {
       targets: [rock, sensor],
       y: 425,
       duration: 800,
-      delay: 800,
+      delay: delay,
       yoyo: true,
       repeat: -1,
-      repeatDelay: 1600,
+      repeatDelay: 1500,
       ease: "Quad.easeIn",
       onUpdate: () => sensor.body.updateFromGameObject()
     });
@@ -572,14 +743,17 @@ class GameScene extends Phaser.Scene {
   createExitPortal() {
     this.portal = this.add.container(this.portalX, 420).setDepth(7);
 
-    this.portalOuter = this.add.ellipse(0, 0, 105, 120, 0x14473e, 0.85);
-    this.portalOuter.setStrokeStyle(4, 0x3ae7c6);
+    const outerColor = this.currentLevel === 3 ? 0x5c1815 : (this.currentLevel === 2 ? 0x221a4f : 0x14473e);
+    const ringColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x7c4dff : 0x3ae7c6);
 
-    this.portalInner = this.add.ellipse(0, 0, 70, 92, 0x228b78, 0.6);
-    this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xaefff3, 0.7);
+    this.portalOuter = this.add.ellipse(0, 0, 105, 120, outerColor, 0.85);
+    this.portalOuter.setStrokeStyle(4, ringColor);
+
+    this.portalInner = this.add.ellipse(0, 0, 70, 92, outerColor, 0.6);
+    this.portalCore = this.add.ellipse(0, 0, 32, 58, 0xffffff, 0.7);
 
     this.portalRunes = this.add
-      .text(0, 0, "✦   ✧   ✦   ✧", { fontSize: "14px", color: "#67ffef" })
+      .text(0, 0, "✦   ✧   ✦   ✧", { fontSize: "14px", color: "#ffffff" })
       .setOrigin(0.5);
 
     this.portal.add([
@@ -611,11 +785,11 @@ class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // HUD
+  // HUD & CONTROLS
   // ==========================================
   createHUD() {
     this.hudBar = this.add
-      .rectangle(480, 24, 960, 48, 0x071513, 0.8)
+      .rectangle(480, 24, 960, 48, 0x071513, 0.85)
       .setScrollFactor(0)
       .setDepth(100);
 
@@ -641,25 +815,42 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    // QUICK LEVEL WARP BUTTONS (Click to jump to any level anytime!)
+    // QUICK LEVEL PROGRESSION BUTTONS (Locked levels require completing previous ones)
     const warpX = 330;
+    const unlockedLevel = this.getUnlockedLevel();
     [1, 2, 3].forEach((lvl, i) => {
       const isCur = lvl === this.currentLevel;
+      const isUnlocked = lvl <= unlockedLevel;
+      const label = isUnlocked ? `L${lvl}` : `🔒L${lvl}`;
       const btn = this.add
-        .text(warpX + i * 54, 24, `L${lvl}`, {
+        .text(warpX + i * 54, 24, label, {
           fontFamily: "Arial, sans-serif",
-          fontSize: "12px",
+          fontSize: isUnlocked ? "12px" : "11px",
           fontStyle: "bold",
-          color: isCur ? "#051814" : "#c5ede2",
-          backgroundColor: isCur ? "#48edd4" : "#143f34",
-          padding: { x: 7, y: 4 }
+          color: isCur ? "#051814" : (isUnlocked ? "#c5ede2" : "#80928d"),
+          backgroundColor: isCur ? "#48edd4" : (isUnlocked ? "#143f34" : "#1a2220"),
+          padding: { x: isUnlocked ? 7 : 5, y: 4 }
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(101)
-        .setInteractive({ useHandCursor: true });
+        .setInteractive({ useHandCursor: isUnlocked });
 
       btn.on("pointerdown", () => {
+        if (!isUnlocked) {
+          if (window.SoundManager && window.SoundManager.playLock) {
+            window.SoundManager.playLock();
+          }
+          this.showMessage(`🔒 LEVEL ${lvl} LOCKED! Complete Level ${lvl - 1} first.`, 2200);
+          this.tweens.add({
+            targets: btn,
+            x: btn.x + 4,
+            duration: 50,
+            yoyo: true,
+            repeat: 3
+          });
+          return;
+        }
         window.SoundManager.playLevelStart();
         this.scene.start("GameScene", { level: lvl });
       });
@@ -872,13 +1063,15 @@ class GameScene extends Phaser.Scene {
       this.activateEcho();
     }
 
-    // Pendulum trigonometric calculation (zero dependencies, 100% crash-proof)
-    if (this.swingingHazard) {
-      const rot = this.swingingHazard.rope.rotation;
-      const tipX = this.swingingHazard.pivotX + Math.sin(rot) * this.swingingHazard.length;
-      const tipY = this.swingingHazard.pivotY + Math.cos(rot) * this.swingingHazard.length;
-      this.swingingHazard.tip.setPosition(tipX, tipY);
-      this.swingingHazard.tip.body.updateFromGameObject();
+    // Update all swinging pendulums
+    if (this.swingingHazards && this.swingingHazards.length > 0) {
+      this.swingingHazards.forEach((h) => {
+        const rot = h.rope.rotation;
+        const tipX = h.pivotX + Math.sin(rot) * h.length;
+        const tipY = h.pivotY + Math.cos(rot) * h.length;
+        h.tip.setPosition(tipX, tipY);
+        h.tip.body.updateFromGameObject();
+      });
     }
 
     if (
@@ -909,7 +1102,7 @@ class GameScene extends Phaser.Scene {
 
     if (
       this.anaconda &&
-      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 650
+      Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anaconda.x, this.anaconda.y) < 680
     ) {
       this.anaconda.stun();
     }
@@ -961,10 +1154,11 @@ class GameScene extends Phaser.Scene {
   }
 
   createEchoWave(x, y) {
+    const waveColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x48edd4);
     for (let r = 0; r < 3; r++) {
       this.time.delayedCall(r * 90, () => {
-        const ring = this.add.circle(x, y - 40, 20, 0x48edd4, 0);
-        ring.setStrokeStyle(3, 0x5affea, 0.9);
+        const ring = this.add.circle(x, y - 40, 20, waveColor, 0);
+        ring.setStrokeStyle(3, waveColor, 0.9);
         ring.setDepth(20);
 
         this.tweens.add({
@@ -987,7 +1181,7 @@ class GameScene extends Phaser.Scene {
         x + Phaser.Math.Between(-15, 15),
         y - 4,
         Phaser.Math.Between(3, 6),
-        0x90b56b,
+        this.cfg.groundMoss,
         0.7
       );
       dust.setDepth(12);
@@ -1009,12 +1203,14 @@ class GameScene extends Phaser.Scene {
     sensor.destroy();
     window.SoundManager.playCrystal();
 
+    const burstColor = this.currentLevel === 3 ? 0xff7043 : (this.currentLevel === 2 ? 0x82b1ff : 0x5affea);
+
     for (let i = 0; i < 16; i++) {
       const spark = this.add.circle(
         container.x,
         container.y,
         Phaser.Math.Between(2, 5),
-        0x5affea,
+        burstColor,
         1
       );
       spark.setDepth(25);
@@ -1128,6 +1324,18 @@ class GameScene extends Phaser.Scene {
     this.levelComplete = true;
     this.physics.pause();
     this.player.setVelocity(0, 0);
+
+    // Save level progression unlock
+    const curUnlocked = this.getUnlockedLevel();
+    if (this.currentLevel === 1 && curUnlocked < 2) {
+      try {
+        localStorage.setItem("echobound_unlocked_level", "2");
+      } catch (e) {}
+    } else if (this.currentLevel === 2 && curUnlocked < 3) {
+      try {
+        localStorage.setItem("echobound_unlocked_level", "3");
+      } catch (e) {}
+    }
 
     this.cameras.main.fade(500, 5, 26, 20);
     this.time.delayedCall(500, () => {

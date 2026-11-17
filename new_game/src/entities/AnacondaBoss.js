@@ -341,36 +341,40 @@ class AnacondaBoss {
     const startX = this.snakeContainer.x + this.headContainer.x + 35;
     const startY = this.snakeContainer.y + this.headContainer.y;
 
-    const venom = this.scene.add.circle(startX, startY, 9, 0x44ff3b, 0.95);
-    venom.setStrokeStyle(2, 0xffffff);
-    venom.setDepth(15);
+    // Dual Venom Barrage for intense boss challenge
+    [-1, 1].forEach((spread, idx) => {
+      this.scene.time.delayedCall(idx * 160, () => {
+        if (this.isStunned || !this.scene.player) return;
 
-    // Ensure physics body is created explicitly
-    this.scene.physics.add.existing(venom);
-    this.venomProjectiles.add(venom);
+        const venom = this.scene.add.circle(startX, startY, 9, 0xff3d00, 0.95);
+        venom.setStrokeStyle(2, 0xffeb3b);
+        venom.setDepth(15);
 
-    const targetX = this.scene.player.x;
-    const dx = targetX - startX;
-    const vx = Phaser.Math.Clamp(dx * 1.4, -280, 280);
+        this.scene.physics.add.existing(venom);
+        this.venomProjectiles.add(venom);
 
-    venom.body.setVelocity(vx, -180);
-    venom.body.setGravityY(520);
+        const targetX = this.scene.player.x + spread * 40;
+        const dx = targetX - startX;
+        const vx = Phaser.Math.Clamp(dx * 1.4, -320, 320);
 
-    this.scene.tweens.add({
-      targets: venom,
-      scale: 1.25,
-      duration: 180,
-      yoyo: true,
-      repeat: -1
+        venom.body.setVelocity(vx, -200);
+        venom.body.setGravityY(540);
+
+        this.scene.tweens.add({
+          targets: venom,
+          scale: 1.3,
+          duration: 160,
+          yoyo: true,
+          repeat: -1
+        });
+
+        this.scene.time.delayedCall(2500, () => {
+          if (venom.active) venom.destroy();
+        });
+      });
     });
 
-    this.scene.time.delayedCall(2500, () => {
-      if (venom.active) {
-        venom.destroy();
-      }
-    });
-
-    this.scene.time.delayedCall(2200, () => {
+    this.scene.time.delayedCall(1900, () => {
       this.attackCooldown = false;
     });
   }
