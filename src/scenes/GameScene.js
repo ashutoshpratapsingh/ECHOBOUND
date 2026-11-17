@@ -432,25 +432,18 @@ export default class GameScene extends Phaser.Scene {
     const rock = this.add.container(rockX, 190).setDepth(8);
     const rockArt = this.add.graphics();
     rockArt.fillStyle(0x5a6860, 1);
-    rockArt.fillPoints([
-      new Phaser.Geom.Point(-36, -16),
-      new Phaser.Geom.Point(-16, -38),
-      new Phaser.Geom.Point(18, -32),
-      new Phaser.Geom.Point(40, -4),
-      new Phaser.Geom.Point(26, 30),
-      new Phaser.Geom.Point(-18, 32),
-      new Phaser.Geom.Point(-40, 6)
-    ], true);
+    const rockPts = [
+      { x: -36, y: -16 },
+      { x: -16, y: -38 },
+      { x: 18, y: -32 },
+      { x: 40, y: -4 },
+      { x: 26, y: 30 },
+      { x: -18, y: 32 },
+      { x: -40, y: 6 }
+    ];
+    rockArt.fillPoints(rockPts, true);
     rockArt.lineStyle(4, 0x2b3832, 1);
-    rockArt.strokePoints([
-      new Phaser.Geom.Point(-36, -16),
-      new Phaser.Geom.Point(-16, -38),
-      new Phaser.Geom.Point(18, -32),
-      new Phaser.Geom.Point(40, -4),
-      new Phaser.Geom.Point(26, 30),
-      new Phaser.Geom.Point(-18, 32),
-      new Phaser.Geom.Point(-40, 6)
-    ], true);
+    rockArt.strokePoints(rockPts, true);
     rock.add(rockArt);
 
     const rockSensor = this.add.rectangle(rockX, 190, 65, 65, 0xffffff, 0);
@@ -1016,12 +1009,10 @@ export default class GameScene extends Phaser.Scene {
 
     // Swinging pendulum hitbox sync
     if (this.swingingHazard) {
-      const point = new Phaser.Math.Vector2(0, this.swingingHazard.length);
-      Phaser.Math.RotateAround(point, 0, 0, this.swingingHazard.rope.rotation);
-      this.swingingHazard.tip.setPosition(
-        this.swingingHazard.pivotX + point.x,
-        this.swingingHazard.pivotY + point.y
-      );
+      const rot = this.swingingHazard.rope.rotation;
+      const tipX = this.swingingHazard.pivotX + Math.sin(rot) * this.swingingHazard.length;
+      const tipY = this.swingingHazard.pivotY + Math.cos(rot) * this.swingingHazard.length;
+      this.swingingHazard.tip.setPosition(tipX, tipY);
       this.swingingHazard.tip.body.updateFromGameObject();
     }
 

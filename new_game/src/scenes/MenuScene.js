@@ -43,7 +43,7 @@ class MenuScene extends Phaser.Scene {
     }
 
     // Glowing cyan ambient aura
-    const aura = this.add.circle(width / 2, 170, 180, 0x48edd4, 0.12);
+    const aura = this.add.circle(width / 2, 160, 180, 0x48edd4, 0.12);
     this.tweens.add({
       targets: aura,
       scale: 1.3,
@@ -55,9 +55,9 @@ class MenuScene extends Phaser.Scene {
 
     // Main Game Title
     this.add
-      .text(width / 2, 90, "ECHOBOUND", {
+      .text(width / 2, 85, "ECHOBOUND", {
         fontFamily: "Georgia, serif",
-        fontSize: "56px",
+        fontSize: "54px",
         fontStyle: "bold",
         color: "#ffffff",
         stroke: "#144837",
@@ -66,7 +66,7 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, 142, "REALMS OF ECHO  •  THE LOST LIGHT", {
+      .text(width / 2, 135, "REALMS OF ECHO  •  THE LOST LIGHT", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#67ffef",
@@ -78,8 +78,8 @@ class MenuScene extends Phaser.Scene {
     this.add
       .text(
         width / 2,
-        185,
-        "Explore 3 progressive levels. Project the Echo Pulse [E] to solidify ethereal pathways\nand stun the Anaconda Guardian. Collect all 3 Lumina Crystals to restore the ancient portal.",
+        175,
+        "Select any level below to play directly, or start from the beginning.\nCast the Echo Pulse [E] to solidify pathways and stun predators.",
         {
           fontFamily: "Arial, sans-serif",
           fontSize: "13px",
@@ -91,13 +91,14 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // ==========================================
-    // LEVEL SELECTION CARDS
+    // LEVEL SELECTION CARDS (Levels 1, 2, 3)
     // ==========================================
     const levels = [
       {
         num: 1,
         title: "LEVEL 1: THE CANOPY",
-        desc: "Whispering Woods • Echo Platforms • Spike Pits",
+        badge: "PLAY LEVEL 1 ➔",
+        desc: "Whispering Woods • Echo Platforms • Spike Pits • 3 Sun Crystals",
         color: "#1c5c49",
         border: "#48edd4",
         x: 210,
@@ -106,7 +107,8 @@ class MenuScene extends Phaser.Scene {
       {
         num: 2,
         title: "LEVEL 2: THE CHASM",
-        desc: "Swinging Pendulums • Rolling Logs • Boulders",
+        badge: "PLAY LEVEL 2 ➔",
+        desc: "Moving Platforms • Thorn Pendulums • Rolling Logs • Boulders",
         color: "#275069",
         border: "#67c4ff",
         x: 480,
@@ -115,7 +117,8 @@ class MenuScene extends Phaser.Scene {
       {
         num: 3,
         title: "LEVEL 3: GUARDIAN'S LAIR",
-        desc: "Banyan Tree • Anaconda Boss • Great Sun Portal",
+        badge: "PLAY LEVEL 3 ➔",
+        desc: "Anaconda Boss • Lunge & Venom • Echo Stun • Great Sun Portal",
         color: "#4e2960",
         border: "#df75ff",
         x: 750,
@@ -129,16 +132,16 @@ class MenuScene extends Phaser.Scene {
 
     // "PLAY FROM BEGINNING" BUTTON
     const playAllBtn = this.add
-      .text(width / 2, 420, "▶ START FULL ADVENTURE (LEVEL 1-3)", {
+      .text(width / 2, 420, "▶ START FROM LEVEL 1", {
         fontFamily: "Arial, sans-serif",
         fontSize: "17px",
         fontStyle: "bold",
         color: "#051814",
         backgroundColor: "#48edd4",
-        padding: { x: 26, y: 13 }
+        padding: { x: 28, y: 13 }
       })
       .setOrigin(0.5)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     this.tweens.add({
       targets: playAllBtn,
@@ -174,64 +177,69 @@ class MenuScene extends Phaser.Scene {
 
   createLevelCard(lvl) {
     const cardBg = this.add
-      .rectangle(lvl.x, lvl.y, 240, 115, Phaser.Display.Color.HexStringToColor(lvl.color).color, 0.9)
+      .rectangle(lvl.x, lvl.y, 240, 125, Phaser.Display.Color.HexStringToColor(lvl.color).color, 0.95)
       .setStrokeStyle(3, Phaser.Display.Color.HexStringToColor(lvl.border).color)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     const titleText = this.add
-      .text(lvl.x, lvl.y - 28, lvl.title, {
+      .text(lvl.x, lvl.y - 32, lvl.title, {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         fontStyle: "bold",
         color: "#ffffff"
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
 
     const descText = this.add
-      .text(lvl.x, lvl.y, lvl.desc, {
+      .text(lvl.x, lvl.y - 2, lvl.desc, {
         fontFamily: "Arial, sans-serif",
         fontSize: "11px",
         color: "#d4ece5",
         align: "center",
         wordWrap: { width: 220 }
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
 
     const playBadge = this.add
-      .text(lvl.x, lvl.y + 32, "PLAY LEVEL ➔", {
+      .text(lvl.x, lvl.y + 36, lvl.badge, {
         fontFamily: "Arial, sans-serif",
         fontSize: "12px",
         fontStyle: "bold",
         color: lvl.border,
         backgroundColor: "#061814",
-        padding: { x: 10, y: 4 }
+        padding: { x: 12, y: 5 }
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
 
-    cardBg.on("pointerover", () => {
-      cardBg.setScale(1.04);
-      titleText.setScale(1.04);
-      descText.setScale(1.04);
-      playBadge.setScale(1.04);
-    });
-
-    cardBg.on("pointerout", () => {
-      cardBg.setScale(1);
-      titleText.setScale(1);
-      descText.setScale(1);
-      playBadge.setScale(1);
-    });
-
-    cardBg.on("pointerdown", () => {
+    const onCardClick = () => {
       this.startLevel(lvl.num);
+    };
+
+    [cardBg, titleText, descText, playBadge].forEach(elem => {
+      elem.on("pointerdown", onCardClick);
+      elem.on("pointerover", () => {
+        cardBg.setScale(1.04);
+        titleText.setScale(1.04);
+        descText.setScale(1.04);
+        playBadge.setScale(1.04);
+      });
+      elem.on("pointerout", () => {
+        cardBg.setScale(1);
+        titleText.setScale(1);
+        descText.setScale(1);
+        playBadge.setScale(1);
+      });
     });
   }
 
   startLevel(levelNumber) {
     window.SoundManager.ensureContext();
     window.SoundManager.playLevelStart();
-    this.cameras.main.fade(300, 6, 20, 19);
-    this.time.delayedCall(300, () => {
+    this.cameras.main.fade(250, 6, 20, 19);
+    this.time.delayedCall(250, () => {
       this.scene.start("GameScene", { level: levelNumber });
     });
   }

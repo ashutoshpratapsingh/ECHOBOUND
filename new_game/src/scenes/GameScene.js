@@ -17,7 +17,6 @@ class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    // Attempt loading visual assets from local folder
     try {
       this.load.image("jungleBackground", "./assets/backgrounds/jungle-world.png");
       this.load.spritesheet("jungleBoy", "./assets/characters/jungle-boy.png", {
@@ -30,7 +29,6 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
-    // Generate programmatic fallback textures to guarantee zero black-screens on file://
     this.ensureFallbackTextures();
 
     // Level-specific world configurations
@@ -60,6 +58,8 @@ class GameScene extends Phaser.Scene {
     this.echoActive = false;
     this.echoDuration = 3200;
     this.stepTimer = 0;
+    this.swingingHazard = null;
+    this.anaconda = null;
 
     // Build World Elements
     this.createBackground();
@@ -75,29 +75,20 @@ class GameScene extends Phaser.Scene {
     this.createMobileControls();
 
     // Level start toast
-    this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 2600);
+    this.showMessage(`LEVEL ${this.currentLevel}: ${this.levelName}`, 2800);
   }
 
-  // ==========================================
-  // PROGRAMMATIC FALLBACK GENERATOR
-  // ==========================================
   ensureFallbackTextures() {
-    // Generate a backup hero texture if jungleBoy is blocked on file://
     if (!this.textures.exists("jungleBoy")) {
       const g = this.make.graphics({ x: 0, y: 0, add: false });
-      // 4 frames side-by-side
       for (let i = 0; i < 4; i++) {
         const ox = i * 420;
-        // Body
         g.fillStyle(0x327f54, 1);
         g.fillRoundedRect(ox + 160, 200, 100, 160, 24);
-        // Head
         g.fillStyle(0xf0c29a, 1);
         g.fillCircle(ox + 210, 140, 50);
-        // Hair
         g.fillStyle(0x3a2012, 1);
         g.fillCircle(ox + 210, 115, 45);
-        // Legs
         g.fillStyle(0x6e4827, 1);
         g.fillRect(ox + 175, 360, 28, 90 + (i % 2) * 15);
         g.fillRect(ox + 215, 360, 28, 90 - (i % 2) * 15);
@@ -106,9 +97,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // 1. PARALLAX JUNGLE BACKGROUND
-  // ==========================================
   createBackground() {
     this.add
       .rectangle(this.worldWidth / 2, 270, this.worldWidth, 540, 0x071b19)
@@ -132,7 +120,6 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Mist particles
     for (let i = 0; i < 35; i++) {
       const mist = this.add.circle(
         Phaser.Math.Between(0, this.worldWidth),
@@ -158,9 +145,6 @@ class GameScene extends Phaser.Scene {
       .setDepth(-2);
   }
 
-  // ==========================================
-  // 2. JUNGLE DECORATIONS & FIREFLIES
-  // ==========================================
   createDecorations() {
     const spacing = 450;
     for (let x = 200; x < this.worldWidth; x += spacing) {
@@ -181,7 +165,6 @@ class GameScene extends Phaser.Scene {
       leaves.setDepth(3);
     }
 
-    // Fireflies
     for (let i = 0; i < 30; i++) {
       const fly = this.add.circle(
         Phaser.Math.Between(80, this.worldWidth - 80),
@@ -203,9 +186,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // 3. GROUND PLATFORMS & MOSS
-  // ==========================================
   createGround() {
     this.ground = this.add.rectangle(
       this.worldWidth / 2,
@@ -235,9 +215,6 @@ class GameScene extends Phaser.Scene {
     mossEdge.setDepth(3);
   }
 
-  // ==========================================
-  // 4. HERO CHARACTER & ANIMATIONS
-  // ==========================================
   createHero() {
     this.player = this.physics.add.sprite(this.checkpointX, 470, "jungleBoy");
     this.player.setOrigin(0.5, 1);
@@ -294,14 +271,14 @@ class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // 5. LEVEL CONTENT BUILDER (1, 2, 3)
+  // BUILD LEVEL CONTENT
   // ==========================================
   buildLevelContent() {
     this.echoPlatforms = [];
     this.crystals = [];
 
     if (this.currentLevel === 1) {
-      // LEVEL 1: INTRO TO ECHO PULSE & SPIKES
+      // LEVEL 1: THE WHISPERING CANOPY
       this.createSpikes([700, 1600]);
       this.createEchoPlatformGroup([
         { x: 950, y: 395, width: 120 },
@@ -316,7 +293,7 @@ class GameScene extends Phaser.Scene {
       ]);
       this.createCheckpointTotem(1750);
     } else if (this.currentLevel === 2) {
-      // LEVEL 2: MOVING PLATFORMS, PENDULUM, ROLLING LOG & BOULDER
+      // LEVEL 2: THE ANCIENT CHASM
       this.createSpikes([600, 1200, 2350]);
       this.createMovingPlatform(750, 395, 1050);
       this.createSwingingPendulum(1350, 75, 245);
@@ -333,7 +310,7 @@ class GameScene extends Phaser.Scene {
       ]);
       this.createCheckpointTotem(2200);
     } else if (this.currentLevel === 3) {
-      // LEVEL 3: THE ANACONDA GUARDIAN'S SANCTUM
+      // LEVEL 3: THE GUARDIAN'S SANCTUM (ANACONDA BOSS)
       this.createSpikes([500, 1250, 2250]);
       this.createSwingingPendulum(1000, 75, 245);
       this.createMovingPlatform(1400, 395, 1680);
@@ -341,7 +318,7 @@ class GameScene extends Phaser.Scene {
       this.createFallingBoulder(2750, 190);
       this.createEchoPlatformGroup([
         { x: 750, y: 395, width: 120 },
-        // Overhead platforms above Anaconda:
+        // Overhead bypass platforms:
         { x: 3000, y: 390, width: 110 },
         { x: 3140, y: 320, width: 120 },
         { x: 3280, y: 245, width: 120 }
@@ -358,9 +335,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // SPIKES GENERATOR
-  // ==========================================
   createSpikes(positions) {
     positions.forEach((x) => {
       const g = this.add.graphics();
@@ -380,9 +354,6 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // ECHO PLATFORMS GENERATOR
-  // ==========================================
   createEchoPlatformGroup(positions) {
     positions.forEach((p) => {
       const bar = this.add.rectangle(p.x, p.y, p.width, 18, 0x47e8da);
@@ -408,9 +379,6 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // CRYSTALS GENERATOR
-  // ==========================================
   createCrystalsGroup(positions) {
     positions.forEach((p) => {
       if (this.savedCrystals > p.id) return;
@@ -465,9 +433,6 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // CHECKPOINT TOTEM
-  // ==========================================
   createCheckpointTotem(x) {
     this.checkpoint = this.add.container(x, 420).setDepth(5);
     const pole = this.add.rectangle(0, 0, 12, 125, 0x8a6e4d);
@@ -484,9 +449,6 @@ class GameScene extends Phaser.Scene {
     this.checkpointTargetX = x;
   }
 
-  // ==========================================
-  // HAZARDS: MOVING PLATFORM, PENDULUM, LOG, BOULDER
-  // ==========================================
   createMovingPlatform(x, y, targetX) {
     this.movingPlatform = this.add.rectangle(x, y, 135, 22, 0x7a5232);
     this.physics.add.existing(this.movingPlatform, true);
@@ -572,15 +534,20 @@ class GameScene extends Phaser.Scene {
     const rock = this.add.container(x, y).setDepth(8);
     const rockArt = this.add.graphics();
     rockArt.fillStyle(0x5a6860, 1);
-    rockArt.fillPoints([
-      new Phaser.Geom.Point(-36, -16),
-      new Phaser.Geom.Point(-16, -38),
-      new Phaser.Geom.Point(18, -32),
-      new Phaser.Geom.Point(40, -4),
-      new Phaser.Geom.Point(26, 30),
-      new Phaser.Geom.Point(-18, 32),
-      new Phaser.Geom.Point(-40, 6)
-    ], true);
+
+    // Clean plain-object points (zero dependency on Geom.Point)
+    const pts = [
+      { x: -36, y: -16 },
+      { x: -16, y: -38 },
+      { x: 18, y: -32 },
+      { x: 40, y: -4 },
+      { x: 26, y: 30 },
+      { x: -18, y: 32 },
+      { x: -40, y: 6 }
+    ];
+    rockArt.fillPoints(pts, true);
+    rockArt.lineStyle(4, 0x2b3832, 1);
+    rockArt.strokePoints(pts, true);
     rock.add(rockArt);
 
     const sensor = this.add.rectangle(x, y, 65, 65, 0xffffff, 0);
@@ -602,9 +569,6 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ==========================================
-  // EXIT PORTAL
-  // ==========================================
   createExitPortal() {
     this.portal = this.add.container(this.portalX, 420).setDepth(7);
 
@@ -651,14 +615,14 @@ class GameScene extends Phaser.Scene {
   // ==========================================
   createHUD() {
     this.hudBar = this.add
-      .rectangle(480, 24, 960, 48, 0x071513, 0.75)
+      .rectangle(480, 24, 960, 48, 0x071513, 0.8)
       .setScrollFactor(0)
       .setDepth(100);
 
     this.healthText = this.add
-      .text(25, 24, "HEALTH: ♥ ♥ ♥", {
+      .text(20, 24, "HEALTH: ♥ ♥ ♥", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "19px",
+        fontSize: "17px",
         color: "#ff5252",
         fontStyle: "bold"
       })
@@ -667,9 +631,9 @@ class GameScene extends Phaser.Scene {
       .setDepth(101);
 
     this.crystalText = this.add
-      .text(205, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
+      .text(175, 24, `CRYSTALS: ${this.crystalsCollected} / 3`, {
         fontFamily: "Arial, sans-serif",
-        fontSize: "16px",
+        fontSize: "15px",
         color: "#5cffe8",
         fontStyle: "bold"
       })
@@ -677,45 +641,56 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    this.levelBadge = this.add
-      .text(375, 24, `LVL ${this.currentLevel}`, {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
-        color: "#ffe57f",
-        backgroundColor: "#164539",
-        padding: { x: 7, y: 3 },
-        fontStyle: "bold"
-      })
-      .setOrigin(0, 0.5)
-      .setScrollFactor(0)
-      .setDepth(101);
+    // QUICK LEVEL WARP BUTTONS (Click to jump to any level anytime!)
+    const warpX = 330;
+    [1, 2, 3].forEach((lvl, i) => {
+      const isCur = lvl === this.currentLevel;
+      const btn = this.add
+        .text(warpX + i * 54, 24, `L${lvl}`, {
+          fontFamily: "Arial, sans-serif",
+          fontSize: "12px",
+          fontStyle: "bold",
+          color: isCur ? "#051814" : "#c5ede2",
+          backgroundColor: isCur ? "#48edd4" : "#143f34",
+          padding: { x: 7, y: 4 }
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(101)
+        .setInteractive({ useHandCursor: true });
+
+      btn.on("pointerdown", () => {
+        window.SoundManager.playLevelStart();
+        this.scene.start("GameScene", { level: lvl });
+      });
+    });
 
     this.progressBarBg = this.add
-      .rectangle(530, 24, 150, 10, 0x193831)
+      .rectangle(570, 24, 130, 10, 0x193831)
       .setScrollFactor(0)
       .setDepth(101);
     this.progressBarFill = this.add
-      .rectangle(455, 24, 0, 10, 0x48edd4)
+      .rectangle(505, 24, 0, 10, 0x48edd4)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(101);
     this.progressMarker = this.add
-      .text(455, 24, "🏃", { fontSize: "13px" })
+      .text(505, 24, "🏃", { fontSize: "12px" })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(102);
 
     this.echoGaugeBg = this.add
-      .rectangle(690, 24, 80, 12, 0x15312b)
+      .rectangle(705, 24, 75, 12, 0x15312b)
       .setScrollFactor(0)
       .setDepth(101);
     this.echoGaugeFill = this.add
-      .rectangle(650, 24, 80, 12, 0x49f5df)
+      .rectangle(667, 24, 75, 12, 0x49f5df)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(101);
     this.echoLabel = this.add
-      .text(690, 24, "ECHO [E]", {
+      .text(705, 24, "ECHO [E]", {
         fontFamily: "Arial, sans-serif",
         fontSize: "10px",
         color: "#08261e",
@@ -726,38 +701,38 @@ class GameScene extends Phaser.Scene {
       .setDepth(102);
 
     this.muteBtn = this.add
-      .text(805, 24, "🔊 SFX ON", {
+      .text(805, 24, "🔊 SFX", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
+        fontSize: "12px",
         color: "#e2fffa",
         backgroundColor: "#164539",
-        padding: { x: 8, y: 5 },
+        padding: { x: 7, y: 4 },
         fontStyle: "bold"
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(101)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     this.muteBtn.on("pointerdown", () => {
       const isMuted = window.SoundManager.toggleMute();
-      this.muteBtn.setText(isMuted ? "🔇 SFX OFF" : "🔊 SFX ON");
+      this.muteBtn.setText(isMuted ? "🔇 SFX" : "🔊 SFX");
       this.muteBtn.setStyle({ backgroundColor: isMuted ? "#451616" : "#164539" });
     });
 
     const menuBtn = this.add
-      .text(905, 24, "MENU ☰", {
+      .text(895, 24, "MENU ☰", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
+        fontSize: "12px",
         color: "#ffffff",
         backgroundColor: "#225949",
-        padding: { x: 8, y: 5 },
+        padding: { x: 9, y: 4 },
         fontStyle: "bold"
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(101)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     menuBtn.on("pointerdown", () => {
       this.scene.start("MenuScene");
@@ -766,7 +741,7 @@ class GameScene extends Phaser.Scene {
     this.portalMessage = this.add
       .text(480, 95, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "18px",
+        fontSize: "17px",
         fontStyle: "bold",
         color: "#ffffff",
         backgroundColor: "#123b30",
@@ -780,9 +755,6 @@ class GameScene extends Phaser.Scene {
       .setDepth(150);
   }
 
-  // ==========================================
-  // INPUT
-  // ==========================================
   setupInput() {
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
@@ -822,7 +794,7 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(200)
-      .setInteractive();
+      .setInteractive({ useHandCursor: true });
 
     btn.setStyle({ stroke: border, strokeThickness: 2 });
 
@@ -845,9 +817,6 @@ class GameScene extends Phaser.Scene {
     return btn;
   }
 
-  // ==========================================
-  // UPDATE LOOP
-  // ==========================================
   update(time, delta) {
     if (!this.player || !this.player.active || this.levelComplete) return;
 
@@ -903,13 +872,12 @@ class GameScene extends Phaser.Scene {
       this.activateEcho();
     }
 
+    // Pendulum trigonometric calculation (zero dependencies, 100% crash-proof)
     if (this.swingingHazard) {
-      const pt = new Phaser.Math.Vector2(0, this.swingingHazard.length);
-      Phaser.Math.RotateAround(pt, 0, 0, this.swingingHazard.rope.rotation);
-      this.swingingHazard.tip.setPosition(
-        this.swingingHazard.pivotX + pt.x,
-        this.swingingHazard.pivotY + pt.y
-      );
+      const rot = this.swingingHazard.rope.rotation;
+      const tipX = this.swingingHazard.pivotX + Math.sin(rot) * this.swingingHazard.length;
+      const tipY = this.swingingHazard.pivotY + Math.cos(rot) * this.swingingHazard.length;
+      this.swingingHazard.tip.setPosition(tipX, tipY);
       this.swingingHazard.tip.body.updateFromGameObject();
     }
 
@@ -922,8 +890,8 @@ class GameScene extends Phaser.Scene {
     }
 
     const progress = Phaser.Math.Clamp(this.player.x / this.portalX, 0, 1);
-    this.progressBarFill.width = 150 * progress;
-    this.progressMarker.x = 455 + 150 * progress;
+    this.progressBarFill.width = 130 * progress;
+    this.progressMarker.x = 505 + 130 * progress;
 
     if (this.player.y > 560) {
       this.respawnPlayer();
@@ -931,9 +899,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // ECHO PULSE ABILITY
-  // ==========================================
   activateEcho() {
     if (this.echoActive || this.levelComplete) return;
 
@@ -985,7 +950,7 @@ class GameScene extends Phaser.Scene {
 
       this.tweens.add({
         targets: this.echoGaugeFill,
-        width: 80,
+        width: 75,
         duration: 1400,
         ease: "Linear",
         onComplete: () => {
@@ -1038,9 +1003,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // CRYSTAL COLLECTION
-  // ==========================================
   collectCrystal(container, sensor, index) {
     if (!sensor.active) return;
 
@@ -1094,9 +1056,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ==========================================
-  // CHECKPOINT SYSTEM
-  // ==========================================
   activateCheckpoint() {
     this.checkpointActivated = true;
     this.checkpointX = this.checkpointTargetX;
@@ -1116,9 +1075,6 @@ class GameScene extends Phaser.Scene {
     this.showMessage("CHECKPOINT SAVED!", 2000);
   }
 
-  // ==========================================
-  // DAMAGE, HEALTH & RESPAWN
-  // ==========================================
   damagePlayer(amount) {
     if (this.damageCooldown || this.levelComplete) return;
 
@@ -1161,9 +1117,6 @@ class GameScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
   }
 
-  // ==========================================
-  // EXIT PORTAL & LEVEL COMPLETION
-  // ==========================================
   enterPortal() {
     if (this.levelComplete) return;
 

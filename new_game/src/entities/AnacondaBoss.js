@@ -13,8 +13,8 @@ class AnacondaBoss {
     this.state = "IDLE"; // IDLE, ALERT, LUNGING, RETRACTING, STUNNED
     this.stunDuration = 4000;
     this.attackCooldown = false;
-    this.attackRange = 360;
-    this.strikeRange = 190;
+    this.attackRange = 380;
+    this.strikeRange = 200;
     this.isStunned = false;
 
     this.venomProjectiles = this.scene.physics.add.group();
@@ -344,6 +344,9 @@ class AnacondaBoss {
     const venom = this.scene.add.circle(startX, startY, 9, 0x44ff3b, 0.95);
     venom.setStrokeStyle(2, 0xffffff);
     venom.setDepth(15);
+
+    // Ensure physics body is created explicitly
+    this.scene.physics.add.existing(venom);
     this.venomProjectiles.add(venom);
 
     const targetX = this.scene.player.x;
